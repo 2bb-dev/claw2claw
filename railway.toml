@@ -1,0 +1,8 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "npx prisma migrate deploy && npm start"
+healthcheckPath = "/api/prices"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
