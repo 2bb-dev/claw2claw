@@ -39,12 +39,23 @@ model Bot {
   humanOwner  String
   ensName     String?
   strategy    Json
-  balance     Float    @default(1000)
   createdAt   DateTime @default(now())
   
   orders      Order[]
   dealsAsMaker Deal[] @relation("maker")
   dealsAsTaker Deal[] @relation("taker")
+  assets      BotAsset[]
+}
+
+model BotAsset {
+  id        String   @id @default(cuid())
+  botId     String
+  bot       Bot      @relation(fields: [botId], references: [id])
+  symbol    String   // BTC, ETH, SOL, USDC, DOGE, etc.
+  amount    Float
+  usdPrice  Float    // Reference price at creation
+  
+  @@unique([botId, symbol])
 }
 
 model Order {
@@ -52,7 +63,7 @@ model Order {
   botId       String
   bot         Bot      @relation(fields: [botId], references: [id])
   type        String   // 'buy' | 'sell'
-  tokenPair   String   // 'ETH/USDC'
+  tokenPair   String   // 'BTC/USDC', 'ETH/SOL', etc.
   price       Float
   amount      Float
   status      String   @default("open")

@@ -1,6 +1,20 @@
-import { authenticateBot } from '@/lib/auth'
-import { prisma } from '@/lib/db'
-import { NextRequest, NextResponse } from 'next/server'
+import { authenticateBot } from '@/lib/auth';
+import { prisma } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+
+// Parse token pair into base and quote assets (e.g., "BTC/USDC" -> { base: "BTC", quote: "USDC" })
+function parseTokenPair(tokenPair: string): { base: string; quote: string } {
+  const [base, quote] = tokenPair.split('/')
+  return { base: base.toUpperCase(), quote: quote.toUpperCase() }
+}
+
+// Get bot's balance for a specific asset
+async function getBotAssetBalance(botId: string, symbol: string): Promise<number> {
+  const asset = await prisma.botAsset.findUnique({
+    where: { botId_symbol: { botId, symbol: symbol.toUpperCase() } }
+  })
+  return asset?.amount ?? 0
+}
 
 // GET - List all open orders (orderbook)
 export async function GET() {
@@ -42,7 +56,7 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json()
-    const { type, tokenPair, price, amount, reason } = body
+    const { type, tokenPair = 'ETH/USDC', price, amount, reason } = body
     
     if (!type || !price || !amount) {
       return NextResponse.json(
@@ -57,27 +71,36 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    const { base, quote } = parseTokenPair(tokenPair)
     
-    // Check if bot has enough balance
-    if (type === 'sell' && bot.balanceETH < amount) {
-      return NextResponse.json(
-        { error: `Insufficient ETH balance. Have: ${bot.balanceETH}, Need: ${amount}` },
-        { status: 400 }
-      )
-    }
-    
-    if (type === 'buy' && bot.balanceUSDC < price * amount) {
-      return NextResponse.json(
-        { error: `Insufficient USDC balance. Have: ${bot.balanceUSDC}, Need: ${price * amount}` },
-        { status: 400 }
-      )
+    // Check if bot has enough balance for the order
+    if (type === 'sell') {
+      // Selling base asset (e.g., selling BTC for USDC)
+      const baseBalance = await getBotAssetBalance(bot.id, base)
+      if (baseBalance < amount) {
+        return NextResponse.json(
+          { error: `Insufficient ${base} balance. Have: ${baseBalance}, Need: ${amount}` },
+          { status: 400 }
+        )
+      }
+    } else {
+      // Buying base asset (e.g., buying BTC with USDC)
+      const quoteBalance = await getBotAssetBalance(bot.id, quote)
+      const totalCost = price * amount
+      if (quoteBalance < totalCost) {
+        return NextResponse.json(
+          { error: `Insufficient ${quote} balance. Have: ${quoteBalance}, Need: ${totalCost}` },
+          { status: 400 }
+        )
+      }
     }
     
     const order = await prisma.order.create({
       data: {
         botId: bot.id,
         type,
-        tokenPair: tokenPair || 'ETH/USDC',
+        tokenPair,
         price,
         amount,
         reason,

@@ -1,6 +1,20 @@
-import { authenticateBot } from '@/lib/auth'
-import { prisma } from '@/lib/db'
-import { NextRequest, NextResponse } from 'next/server'
+import { authenticateBot } from '@/lib/auth';
+import { prisma } from '@/lib/db';
+import { NextRequest, NextResponse } from 'next/server';
+
+// Parse token pair into base and quote assets
+function parseTokenPair(tokenPair: string): { base: string; quote: string } {
+  const [base, quote] = tokenPair.split('/')
+  return { base: base.toUpperCase(), quote: quote.toUpperCase() }
+}
+
+// Get bot's balance for a specific asset
+async function getBotAssetBalance(botId: string, symbol: string): Promise<number> {
+  const asset = await prisma.botAsset.findUnique({
+    where: { botId_symbol: { botId, symbol: symbol.toUpperCase() } }
+  })
+  return asset?.amount ?? 0
+}
 
 // POST - Take an order (execute a deal)
 export async function POST(
@@ -52,21 +66,24 @@ export async function POST(
     const amount = order.amount
     const price = order.price
     const total = amount * price
+    const { base, quote } = parseTokenPair(order.tokenPair)
     
     // Validate taker has enough balance
     if (order.type === 'sell') {
-      // Maker is selling ETH, taker is buying → taker needs USDC
-      if (taker.balanceUSDC < total) {
+      // Maker is selling base asset, taker is buying → taker needs quote asset
+      const takerQuoteBalance = await getBotAssetBalance(taker.id, quote)
+      if (takerQuoteBalance < total) {
         return NextResponse.json(
-          { error: `Insufficient USDC. Have: ${taker.balanceUSDC}, Need: ${total}` },
+          { error: `Insufficient ${quote}. Have: ${takerQuoteBalance}, Need: ${total}` },
           { status: 400 }
         )
       }
     } else {
-      // Maker is buying ETH, taker is selling → taker needs ETH
-      if (taker.balanceETH < amount) {
+      // Maker is buying base asset, taker is selling → taker needs base asset
+      const takerBaseBalance = await getBotAssetBalance(taker.id, base)
+      if (takerBaseBalance < amount) {
         return NextResponse.json(
-          { error: `Insufficient ETH. Have: ${taker.balanceETH}, Need: ${amount}` },
+          { error: `Insufficient ${base}. Have: ${takerBaseBalance}, Need: ${amount}` },
           { status: 400 }
         )
       }
@@ -81,36 +98,44 @@ export async function POST(
       })
       
       if (order.type === 'sell') {
-        // Maker sells ETH → Maker gets USDC, Taker gets ETH
-        await tx.bot.update({
-          where: { id: maker.id },
-          data: {
-            balanceETH: { decrement: amount },
-            balanceUSDC: { increment: total }
-          }
+        // Maker sells base → Maker: -base +quote, Taker: +base -quote
+        await tx.botAsset.update({
+          where: { botId_symbol: { botId: maker.id, symbol: base } },
+          data: { amount: { decrement: amount } }
         })
-        await tx.bot.update({
-          where: { id: taker.id },
-          data: {
-            balanceETH: { increment: amount },
-            balanceUSDC: { decrement: total }
-          }
+        await tx.botAsset.upsert({
+          where: { botId_symbol: { botId: maker.id, symbol: quote } },
+          update: { amount: { increment: total } },
+          create: { botId: maker.id, symbol: quote, amount: total, usdPrice: 1 }
+        })
+        await tx.botAsset.upsert({
+          where: { botId_symbol: { botId: taker.id, symbol: base } },
+          update: { amount: { increment: amount } },
+          create: { botId: taker.id, symbol: base, amount, usdPrice: price }
+        })
+        await tx.botAsset.update({
+          where: { botId_symbol: { botId: taker.id, symbol: quote } },
+          data: { amount: { decrement: total } }
         })
       } else {
-        // Maker buys ETH → Maker gets ETH, Taker gets USDC
-        await tx.bot.update({
-          where: { id: maker.id },
-          data: {
-            balanceETH: { increment: amount },
-            balanceUSDC: { decrement: total }
-          }
+        // Maker buys base → Maker: +base -quote, Taker: -base +quote
+        await tx.botAsset.upsert({
+          where: { botId_symbol: { botId: maker.id, symbol: base } },
+          update: { amount: { increment: amount } },
+          create: { botId: maker.id, symbol: base, amount, usdPrice: price }
         })
-        await tx.bot.update({
-          where: { id: taker.id },
-          data: {
-            balanceETH: { decrement: amount },
-            balanceUSDC: { increment: total }
-          }
+        await tx.botAsset.update({
+          where: { botId_symbol: { botId: maker.id, symbol: quote } },
+          data: { amount: { decrement: total } }
+        })
+        await tx.botAsset.update({
+          where: { botId_symbol: { botId: taker.id, symbol: base } },
+          data: { amount: { decrement: amount } }
+        })
+        await tx.botAsset.upsert({
+          where: { botId_symbol: { botId: taker.id, symbol: quote } },
+          update: { amount: { increment: total } },
+          create: { botId: taker.id, symbol: quote, amount: total, usdPrice: 1 }
         })
       }
       

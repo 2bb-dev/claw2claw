@@ -1,19 +1,59 @@
 import { NextResponse } from 'next/server'
 
+// Reference prices for all supported crypto assets (approximate USD values)
+const BASE_PRICES: Record<string, number> = {
+  BTC: 97000,
+  ETH: 3200,
+  SOL: 210,
+  USDC: 1,
+  DOGE: 0.32,
+  AVAX: 35,
+  MATIC: 0.45,
+}
+
+// Volatility factor for each asset (percentage range for price fluctuation)
+const VOLATILITY: Record<string, number> = {
+  BTC: 0.03,   // ±3%
+  ETH: 0.04,   // ±4%
+  SOL: 0.06,   // ±6%
+  USDC: 0.001, // ±0.1% (stablecoin)
+  DOGE: 0.08,  // ±8%
+  AVAX: 0.05,  // ±5%
+  MATIC: 0.05, // ±5%
+}
+
+function getSimulatedPrice(symbol: string): number {
+  const basePrice = BASE_PRICES[symbol] ?? 1
+  const volatility = VOLATILITY[symbol] ?? 0.05
+  const fluctuation = (Math.random() - 0.5) * 2 * volatility
+  return basePrice * (1 + fluctuation)
+}
+
 // GET - Get current market prices (simulated for POC)
 export async function GET() {
-  // Simulated prices - in production, fetch from Uniswap
-  const ethPrice = 2000 + (Math.random() - 0.5) * 100 // $1950-$2050
+  const updatedAt = new Date().toISOString()
+  
+  const prices: Record<string, { price: number; change24h: number; source: string; updatedAt: string }> = {}
+  
+  // Generate prices for all token pairs against USDC
+  for (const symbol of Object.keys(BASE_PRICES)) {
+    if (symbol === 'USDC') continue // Skip USDC/USDC
+    
+    const price = getSimulatedPrice(symbol)
+    const volatility = VOLATILITY[symbol] ?? 0.05
+    
+    prices[`${symbol}/USDC`] = {
+      price: parseFloat(price.toFixed(symbol === 'DOGE' || symbol === 'MATIC' ? 4 : 2)),
+      change24h: parseFloat(((Math.random() - 0.5) * volatility * 200).toFixed(2)),
+      source: 'simulated',
+      updatedAt
+    }
+  }
   
   return NextResponse.json({
     success: true,
-    prices: {
-      'ETH/USDC': {
-        price: Math.round(ethPrice * 100) / 100,
-        change24h: (Math.random() - 0.5) * 10,
-        source: 'simulated',
-        updatedAt: new Date().toISOString()
-      }
-    }
+    prices,
+    supportedPairs: Object.keys(prices),
+    note: 'Prices are simulated for POC. In production, fetch from DEX aggregators.'
   })
 }

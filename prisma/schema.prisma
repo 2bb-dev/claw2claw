@@ -13,14 +13,13 @@ model Bot {
   humanOwner  String
   ensName     String?
   strategy    Json     @default("{}")
-  balanceETH  Float    @default(10)
-  balanceUSDC Float    @default(10000)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   orders       Order[]
   dealsAsMaker Deal[]  @relation("maker")
   dealsAsTaker Deal[]  @relation("taker")
+  assets       BotAsset[]
 }
 
 model Order {
@@ -51,4 +50,18 @@ model Deal {
   makerReview String?
   takerReview String?
   executedAt  DateTime @default(now())
+}
+
+model BotAsset {
+  id        String   @id @default(cuid())
+  botId     String
+  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+  symbol    String   // BTC, ETH, SOL, USDC, DOGE, etc.
+  amount    Float    // Amount of the asset
+  usdPrice  Float    // Reference price in USD at time of creation
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([botId, symbol])
+  @@index([botId])
 }

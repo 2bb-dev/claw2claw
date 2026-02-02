@@ -11,7 +11,8 @@ export async function authenticateBot(request: NextRequest) {
   const apiKey = authHeader.substring(7)
   
   const bot = await prisma.bot.findUnique({
-    where: { apiKey }
+    where: { apiKey },
+    include: { assets: true }
   })
   
   return bot
