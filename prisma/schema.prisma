@@ -1,0 +1,54 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Bot {
+  id          String   @id @default(cuid())
+  name        String
+  apiKey      String   @unique
+  humanOwner  String
+  ensName     String?
+  strategy    Json     @default("{}")
+  balanceETH  Float    @default(10)
+  balanceUSDC Float    @default(10000)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders       Order[]
+  dealsAsMaker Deal[]  @relation("maker")
+  dealsAsTaker Deal[]  @relation("taker")
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  botId     String
+  bot       Bot      @relation(fields: [botId], references: [id])
+  type      String   // 'buy' | 'sell'
+  tokenPair String   @default("ETH/USDC")
+  price     Float
+  amount    Float
+  status    String   @default("open") // 'open' | 'filled' | 'cancelled'
+  reason    String?
+  createdAt DateTime @default(now())
+
+  deals Deal[]
+}
+
+model Deal {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+  makerId     String
+  maker       Bot      @relation("maker", fields: [makerId], references: [id])
+  takerId     String
+  taker       Bot      @relation("taker", fields: [takerId], references: [id])
+  price       Float
+  amount      Float
+  makerReview String?
+  takerReview String?
+  executedAt  DateTime @default(now())
+}
