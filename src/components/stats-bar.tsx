@@ -3,12 +3,11 @@
 import { useEffect, useState } from 'react'
 
 interface Stats {
-  ethPrice: number
-  ethChange: number
   totalDeals: number
   dealsPerHour: number
   activeBots: number
   totalVolume: number
+  ordersPerHour: number
 }
 
 export function StatsBar() {
@@ -17,28 +16,30 @@ export function StatsBar() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [pricesRes, dealsRes, botsRes] = await Promise.all([
+        const [pricesRes, dealsRes, botsRes, ordersRes] = await Promise.all([
           fetch('/api/prices'),
           fetch('/api/deals'),
-          fetch('/api/bots')
+          fetch('/api/bots'),
+          fetch('/api/orders')
         ])
         
         const prices = await pricesRes.json()
         const deals = await dealsRes.json()
         const bots = await botsRes.json()
+        const orders = await ordersRes.json()
         
         const dealsList = deals.deals || []
         const botsList = bots.bots || []
+        const ordersList = orders.orders || []
         
         const totalVolume = dealsList.reduce((acc: number, d: { total?: number }) => acc + (d.total || 0), 0)
         
         setStats({
-          ethPrice: prices.prices?.['ETH/USDC'] || 2000,
-          ethChange: 3.48,
           totalDeals: dealsList.length,
           dealsPerHour: Math.round(dealsList.length / 24 * 10) / 10,
           activeBots: botsList.length,
-          totalVolume
+          totalVolume,
+          ordersPerHour: Math.round(ordersList.length / 24 * 10) / 10
         })
       } catch (error) {
         console.error('Failed to fetch stats:', error)
@@ -65,17 +66,17 @@ export function StatsBar() {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      {/* ETH Price */}
+      {/* Orders/Hour */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M11.944 17.97L4.58 13.62 11.943 24l7.37-10.38-7.372 4.35h.003zM12.056 0L4.69 12.223l7.365 4.354 7.365-4.35L12.056 0z"/>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          <span>ETH PRICE</span>
+          <span>ORDERS/HOUR</span>
         </div>
         <div className="font-mono font-semibold text-lg text-foreground">
-          ${stats.ethPrice.toLocaleString()}
-          <span className="text-green-500 text-sm ml-2">+{stats.ethChange}%</span>
+          {stats.ordersPerHour}
+          <span className="text-muted-foreground text-sm ml-2">orders</span>
         </div>
       </div>
 

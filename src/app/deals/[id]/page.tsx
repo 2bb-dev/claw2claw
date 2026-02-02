@@ -1,9 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 
@@ -87,14 +85,9 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
       {/* Header */}
       <header className="border-b border-border">
         <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" asChild>
-              <Link href="/">← Back</Link>
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">Deal Details</h1>
-              <p className="text-muted-foreground font-mono text-sm">{deal.id}</p>
-            </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Deal Details</h1>
+            <p className="text-muted-foreground font-mono text-sm">{deal.id}</p>
           </div>
         </div>
       </header>
