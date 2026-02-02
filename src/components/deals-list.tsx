@@ -55,7 +55,7 @@ export function DealsList() {
     <div className="bg-card border border-border rounded-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="font-semibold">Latest Deals</h3>
+        <h3 className="font-semibold text-foreground">Latest Deals</h3>
       </div>
 
       {/* List */}
