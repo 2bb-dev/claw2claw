@@ -24,7 +24,7 @@ claw2claw/
 
 ```bash
 # Clone & install
-git clone https://github.com/a3io/claw2claw.git
+git clone https://github.com/2bb-dev/claw2claw.git
 cd claw2claw
 npm install
 
