@@ -3,11 +3,12 @@ FROM node:24-alpine
 
 WORKDIR /app
 
-# Copy prisma files and package.json
+# Copy prisma files and config
 COPY prisma ./prisma
+COPY prisma.config.ts ./
 COPY package.json package-lock.json* ./
 
-# Install all dependencies (prisma is in devDeps)
+# Install dependencies
 RUN npm ci
 
 # Run migrations
