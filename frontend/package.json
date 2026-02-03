@@ -4,10 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate --schema=../prisma/schema.prisma && next build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate --schema=../prisma/schema.prisma",
     "test": "vitest",
     "test:e2e": "vitest run tests/e2e/bot-simulation.test.ts"
   },
@@ -20,7 +19,6 @@
     "nanoid": "^5.1.6",
     "next": "16.1.6",
     "pg": "^8.18.0",
-    "prisma": "^7.3.0",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",

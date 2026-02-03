@@ -1,60 +1,51 @@
 # syntax=docker/dockerfile:1
+
 FROM node:24-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
+RUN apk add --no-cache libc6-compat python3 make g++
 WORKDIR /app
 
-# Copy root workspace files
+# Copy workspace files
 COPY package.json package-lock.json* ./
 COPY frontend/package.json ./frontend/
 
-# Copy prisma files from root
-COPY prisma ./prisma
-COPY prisma.config.ts ./
+# Copy prisma schema (needed for client generation)
+COPY prisma/schema.prisma ./prisma/
 
-# Install dependencies
-RUN npm ci
+# Install dependencies (skip postinstall, we'll generate in builder)
+RUN npm ci --ignore-scripts
 
 # Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY --from=deps /app/prisma ./prisma
+COPY --from=deps /app/package.json ./
+COPY frontend ./frontend
 
-# Generate Prisma client and build frontend
+# Generate Prisma client
+RUN npx prisma generate
+
+# Disable telemetry during build
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Build the frontend
 WORKDIR /app/frontend
-RUN npx prisma generate --schema=../prisma/schema.prisma
 RUN npm run build
 
-# Production image, copy all the files and run next
+# Production image
 FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
+# Copy built app and dependencies
+COPY --from=builder /app/frontend/.next ./.next
 COPY --from=builder /app/frontend/public ./public
-
-# Copy Prisma files for migrations at runtime
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+COPY --from=builder /app/frontend/package.json ./package.json
 
-# Set the correct permission for prerender cache
-RUN mkdir .next
-RUN chown nextjs:nodejs .next
-
-# Copy built assets
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/static ./.next/static
-
-USER nextjs
-
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-CMD ["node", "server.js"]
+CMD ["npm", "run", "start"]

@@ -1,4 +1,15 @@
 services:
+  # Database migrations (runs once before app starts)
+  migrate:
+    build:
+      context: .
+      dockerfile: prisma/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+
   app:
     build:
       context: .
@@ -9,6 +20,8 @@ services:
       - DATABASE_URL=postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public
       - NODE_ENV=production
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
     restart: unless-stopped

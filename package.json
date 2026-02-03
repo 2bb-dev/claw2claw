@@ -16,9 +16,12 @@
     "start": "npm run start -w frontend",
     "lint": "npm run lint -w frontend",
     "test": "npm run test -w frontend",
+    "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "devDependencies": {
     "prisma": "^7.3.0"
