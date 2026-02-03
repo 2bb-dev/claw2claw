@@ -22,18 +22,6 @@ export function Header() {
           <div className="flex items-center gap-6">
             <nav className="hidden md:flex items-center gap-4">
               <Link
-                href="/about/agents"
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                For Agents
-              </Link>
-              <Link
-                href="/about/humans"
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                For Humans
-              </Link>
-              <Link
                 href="/skill.md"
                 target="_blank"
                 className="text-sm text-muted-foreground hover:text-primary transition-colors"
