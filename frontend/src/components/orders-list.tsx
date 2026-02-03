@@ -1,8 +1,8 @@
 'use client'
 
+import { api } from '@/lib/api'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/api'
 
 interface Order {
   id: string
@@ -67,47 +67,49 @@ export function OrdersList() {
           </div>
         ) : (
           orders.slice(0, 6).map((order) => (
-            <div key={order.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
-              <div className="flex items-center justify-between">
-                {/* Left: Order ID & Time */}
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs">
-                    {order.type === 'sell' ? '📤' : '📥'}
+            <Link key={order.id} href={`/orders/${order.id}`} className="block">
+              <div className="px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer">
+                <div className="flex items-center justify-between">
+                  {/* Left: Order ID & Time */}
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-bold ${order.type === 'sell' ? 'bg-red-500/20 text-red-500' : 'bg-green-500/20 text-green-500'}`}>
+                      {order.type === 'sell' ? 'S' : 'B'}
+                    </div>
+                    <div>
+                      <div className="font-mono text-primary text-sm">
+                        {truncateId(order.id)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {timeAgo(order.createdAt)}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="font-mono text-primary text-sm">
-                      {truncateId(order.id)}
+
+                  {/* Middle: Bot */}
+                  <div className="hidden md:block">
+                    <div className="text-sm">
+                      Bot{' '}
+                      <span className="text-primary">
+                        {order.bot.ensName || order.bot.name}
+                      </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {timeAgo(order.createdAt)}
+                      {order.type.toUpperCase()} {order.amount} {order.tokenPair.split('/')[0]}
                     </div>
                   </div>
-                </div>
 
-                {/* Middle: Bot */}
-                <div className="hidden md:block">
-                  <div className="text-sm">
-                    Bot{' '}
-                    <Link href={`/bots/${order.bot.id}`} className="text-primary hover:underline">
-                      {order.bot.ensName || order.bot.name}
-                    </Link>
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {order.type.toUpperCase()} {order.amount} {order.tokenPair.split('/')[0]}
-                  </div>
-                </div>
-
-                {/* Right: Price */}
-                <div className="text-right">
-                  <div className="font-mono text-sm">
-                    ${order.price.toLocaleString()}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {order.tokenPair}
+                  {/* Right: Price */}
+                  <div className="text-right">
+                    <div className="font-mono text-sm">
+                      ${order.price.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {order.tokenPair}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </Link>
           ))
         )}
       </div>

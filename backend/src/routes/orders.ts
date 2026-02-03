@@ -50,6 +50,59 @@ export async function ordersRoutes(fastify: FastifyInstance) {
     }
   })
 
+  // GET /api/orders/:id - Get a single order by ID
+  fastify.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    const { id } = request.params
+    
+    // Skip if this looks like the 'take' action
+    if (id === 'take') {
+      return reply.callNotFound()
+    }
+    
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: {
+        bot: {
+          select: { 
+            id: true, 
+            name: true, 
+            ensName: true,
+            assets: {
+              select: { symbol: true, amount: true, usdPrice: true }
+            }
+          }
+        }
+      }
+    })
+    
+    if (!order) {
+      return reply.status(404).send({ error: 'Order not found' })
+    }
+    
+    return {
+      success: true,
+      order: {
+        id: order.id,
+        bot: {
+          ...order.bot,
+          assets: order.bot.assets.map(a => ({
+            symbol: a.symbol,
+            amount: a.amount,
+            usdValue: a.amount * a.usdPrice
+          }))
+        },
+        type: order.type,
+        tokenPair: order.tokenPair,
+        price: order.price,
+        amount: order.amount,
+        total: order.price * order.amount,
+        reason: order.reason,
+        status: order.status,
+        createdAt: order.createdAt,
+      }
+    }
+  })
+
   // POST /api/orders - Create a new order
   fastify.post<{ Body: CreateOrderBody }>('/', async (request, reply) => {
     const bot = await authenticateBot(request as FastifyRequest)

@@ -1,8 +1,8 @@
 'use client'
 
+import { api } from '@/lib/api'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/api'
 
 interface Deal {
   id: string
@@ -76,8 +76,8 @@ export function DealsList() {
               <div className="flex items-center justify-between">
                 {/* Left: Deal ID & Time */}
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded bg-muted flex items-center justify-center text-xs">
-                    ✅
+                  <div className="w-8 h-8 rounded bg-green-500/20 flex items-center justify-center text-xs font-bold text-green-500">
+                    ✓
                   </div>
                   <div>
                     <div className="font-mono text-primary text-sm">
