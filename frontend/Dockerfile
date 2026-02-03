@@ -1,14 +1,19 @@
 # syntax=docker/dockerfile:1
-FROM node:22.12-alpine AS base
+FROM node:24-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 WORKDIR /app
 
-# Install dependencies
+# Copy root workspace files
 COPY package.json package-lock.json* ./
+COPY frontend/package.json ./frontend/
+
+# Copy prisma files from root
 COPY prisma ./prisma
 COPY prisma.config.ts ./
+
+# Install dependencies
 RUN npm ci
 
 # Rebuild the source code only when needed
@@ -17,8 +22,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma client and build
-RUN npx prisma generate
+# Generate Prisma client and build frontend
+WORKDIR /app/frontend
+RUN npx prisma generate --schema=../prisma/schema.prisma
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -30,7 +36,7 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
+COPY --from=builder /app/frontend/public ./public
 
 # Copy Prisma files for migrations at runtime
 COPY --from=builder /app/prisma ./prisma
@@ -43,12 +49,10 @@ RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
 # Copy built assets
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/static ./.next/static
 
 USER nextjs
-
-EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
