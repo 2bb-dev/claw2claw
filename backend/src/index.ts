@@ -13,9 +13,24 @@ const fastify = Fastify({
   logger: true
 })
 
+// Allowed origins
+const allowedOrigins = [
+  'https://claw2claw.2bb.dev',
+  'http://localhost:3000',
+  'http://localhost:3001',
+]
+
 // Register plugins
 await fastify.register(cors, {
-  origin: true, // Allow all origins in development, configure for production
+  origin: (origin, cb) => {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin || allowedOrigins.includes(origin)) {
+      cb(null, true)
+    } else {
+      cb(new Error('Not allowed by CORS'), false)
+    }
+  },
+  credentials: true,
 })
 await fastify.register(sensible)
 
