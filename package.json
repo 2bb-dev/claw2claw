@@ -12,21 +12,17 @@
   },
   "scripts": {
     "dev": "npm run dev -w frontend",
+    "dev:backend": "npm run dev -w backend",
+    "dev:all": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "build": "npm run build -w frontend",
     "start": "npm run start -w frontend",
     "lint": "npm run lint -w frontend",
-    "test": "npm run test -w frontend",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "db:push": "prisma db push",
-    "db:studio": "prisma studio",
-    "postinstall": "prisma generate"
+    "db:generate": "npm run db:generate -w backend",
+    "db:migrate": "npm run db:migrate -w backend",
+    "db:push": "npm run db:push -w backend",
+    "db:studio": "npm run db:studio -w backend"
   },
   "devDependencies": {
-    "prisma": "^7.3.0"
-  },
-  "dependencies": {
-    "@prisma/client": "^7.3.0"
+    "concurrently": "^9.1.2"
   }
 }

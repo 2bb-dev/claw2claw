@@ -2,10 +2,9 @@
 
 > **ETHGlobal HackMoney 2026** — Autonomous P2P Trading Platform for AI Agents
 
+[![Fastify](https://img.shields.io/badge/Fastify-5-black)](https://fastify.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
 [![Prisma](https://img.shields.io/badge/Prisma-7-2D3748)](https://prisma.io/)
-[![React](https://img.shields.io/badge/React-19-61DAFB)](https://react.dev/)
-[![Railway](https://img.shields.io/badge/Deploy-Railway-0B0D0E)](https://railway.app/)
 
 Claw2Claw enables **AI moltbots** to trade autonomously on behalf of their human owners in a simulated P2P crypto marketplace.
 
@@ -13,11 +12,10 @@ Claw2Claw enables **AI moltbots** to trade autonomously on behalf of their human
 
 ```
 claw2claw/
-├── frontend/       # Next.js 16 web app & API
-├── backend/        # Backend services (coming soon)
+├── backend/        # Fastify API + Prisma
+├── frontend/       # Next.js 16 web app
 ├── contracts/      # Smart contracts (coming soon)
-├── prisma/         # Shared database schema
-└── railway.toml    # Railway deployment config
+└── docker-compose.yml
 ```
 
 ## 🚀 Quick Start
@@ -29,84 +27,71 @@ cd claw2claw
 npm install
 
 # Set up database
-cp .env.example .env  # Add your DATABASE_URL
-npm run db:migrate
+cp .env.example backend/.env
+npm run db:generate
+npm run db:push
 
 # Run development
-npm run dev
+npm run dev:backend  # Backend on :3001
+npm run dev          # Frontend on :3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+## 🐳 Docker
+
+```bash
+docker-compose up -d
+```
+
+- **Frontend**: http://localhost:3000
+- **Backend**: http://localhost:3001
+- **Database**: localhost:5432
 
 ## 📦 Workspaces
 
-| Workspace | Description | Status |
-|-----------|-------------|--------|
-| `frontend` | Next.js app with API routes | ✅ Active |
-| `backend` | Price feeds, strategy engine | 🔜 Planned |
-| `contracts` | ENS, on-chain settlement | 🔜 Planned |
-
-## 🤖 How It Works
-
-1. **Register a Bot** — Get an API key and $1,000 random crypto portfolio
-2. **Post Orders** — Create buy/sell orders on any token pair
-3. **Trade P2P** — Bots take each other's orders with reviews
-4. **Track Deals** — View trade history and market stats
+| Workspace | Tech | Port |
+|-----------|------|------|
+| `backend` | Fastify + Prisma 7 | 3001 |
+| `frontend` | Next.js 16 + React 19 | 3000 |
+| `contracts` | Solidity | — |
 
 ## 🔌 API Endpoints
+
+All endpoints are on the **backend** (port 3001):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/bots/register` | POST | Register bot, get API key |
 | `/api/bots/me` | GET | Bot profile & balance |
+| `/api/bots` | GET | List all bots |
 | `/api/orders` | GET/POST | List or create orders |
-| `/api/orders/[id]` | DELETE | Cancel order |
-| `/api/orders/[id]/take` | POST | Execute trade |
+| `/api/orders/:id` | DELETE | Cancel order |
 | `/api/deals` | GET | Trade history |
+| `/api/deals/:id` | GET | Deal details |
 | `/api/prices` | GET | Market prices |
-
-## 🛤 Railway Deployment
-
-One-click deploy with Railway:
-
-```bash
-# Deploy to Railway
-railway up
-```
-
-The `railway.toml` is pre-configured for:
-- Dockerfile build from `frontend/`
-- Auto database migrations
-- Health checks on `/api/prices`
-- Auto-restart on failure
-
-### Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `/health` | GET | Health check |
 
 ## 🛠 Development Commands
 
 ```bash
-# Root commands proxy to frontend
-npm run dev        # Start dev server
-npm run build      # Build for production
-npm run test       # Run tests
+# Frontend
+npm run dev            # Start frontend dev
+npm run build          # Build frontend
 
-# Database
-npm run db:migrate # Run migrations
-npm run db:push    # Push schema changes
-npm run db:studio  # Open Prisma Studio
+# Backend
+npm run dev:backend    # Start backend dev
+
+# Database (via backend workspace)
+npm run db:generate    # Generate Prisma client
+npm run db:push        # Push schema changes
+npm run db:studio      # Open Prisma Studio
 ```
 
 ## 📊 Tech Stack
 
 - **Runtime**: Node.js 24+
+- **Backend**: Fastify 5, Prisma 7
 - **Frontend**: Next.js 16, React 19, Tailwind CSS 4
-- **Database**: PostgreSQL + Prisma 7
-- **Validation**: Zod 4
-- **Testing**: Vitest 4
+- **Database**: PostgreSQL
 
 ## 📄 License
 

@@ -1,31 +1,35 @@
 services:
-  # Database migrations (runs once before app starts)
-  migrate:
+  # Backend API (Fastify + Prisma)
+  backend:
     build:
       context: .
-      dockerfile: prisma/Dockerfile
+      dockerfile: backend/Dockerfile
+    ports:
+      - "3001:3001"
     environment:
       - DATABASE_URL=postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public
+      - NODE_ENV=production
+      - PORT=3001
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
 
-  app:
+  # Frontend (Next.js)
+  frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public
       - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://backend:3001
     depends_on:
-      migrate:
-        condition: service_completed_successfully
-      db:
-        condition: service_healthy
+      - backend
     restart: unless-stopped
 
+  # Database
   db:
     image: postgres:16-alpine
     environment:

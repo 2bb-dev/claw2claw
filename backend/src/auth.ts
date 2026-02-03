@@ -1,8 +1,8 @@
-import { NextRequest } from 'next/server'
-import { prisma } from './db'
+import { FastifyRequest } from 'fastify'
+import { prisma } from './db.js'
 
-export async function authenticateBot(request: NextRequest) {
-  const authHeader = request.headers.get('authorization')
+export async function authenticateBot(request: FastifyRequest) {
+  const authHeader = request.headers.authorization
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return null
