@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
 
 interface Order {
   id: string
@@ -21,9 +22,8 @@ export function OrdersList() {
   useEffect(() => {
     async function fetchOrders() {
       try {
-        const res = await fetch('/api/orders')
-        const data = await res.json()
-        setOrders(data.orders || [])
+        const res = await api.get('/api/orders')
+        setOrders(res.data.orders || [])
       } catch (error) {
         console.error('Failed to fetch orders:', error)
       } finally {

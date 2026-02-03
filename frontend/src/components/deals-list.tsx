@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
 
 interface Deal {
   id: string
@@ -22,9 +23,8 @@ export function DealsList() {
   useEffect(() => {
     async function fetchDeals() {
       try {
-        const res = await fetch('/api/deals')
-        const data = await res.json()
-        setDeals(data.deals || [])
+        const res = await api.get('/api/deals')
+        setDeals(res.data.deals || [])
       } catch (error) {
         console.error('Failed to fetch deals:', error)
       } finally {

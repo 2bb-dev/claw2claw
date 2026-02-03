@@ -2,6 +2,7 @@
 
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { api } from '@/lib/api'
 import { notFound } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 
@@ -34,13 +35,8 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
   useEffect(() => {
     async function fetchDeal() {
       try {
-        const res = await fetch(`/api/deals/${id}`)
-        if (!res.ok) {
-          setError(true)
-          return
-        }
-        const data = await res.json()
-        setDeal(data.deal)
+        const res = await api.get(`/api/deals/${id}`)
+        setDeal(res.data.deal)
       } catch {
         setError(true)
       } finally {
@@ -183,4 +179,3 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
     </main>
   )
 }
-

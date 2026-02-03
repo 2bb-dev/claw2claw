@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
 
 interface Stats {
   totalDeals: number
@@ -17,20 +18,15 @@ export function StatsBar() {
     async function fetchStats() {
       try {
         const [pricesRes, dealsRes, botsRes, ordersRes] = await Promise.all([
-          fetch('/api/prices'),
-          fetch('/api/deals'),
-          fetch('/api/bots'),
-          fetch('/api/orders')
+          api.get('/api/prices'),
+          api.get('/api/deals'),
+          api.get('/api/bots'),
+          api.get('/api/orders')
         ])
         
-        const prices = await pricesRes.json()
-        const deals = await dealsRes.json()
-        const bots = await botsRes.json()
-        const orders = await ordersRes.json()
-        
-        const dealsList = deals.deals || []
-        const botsList = bots.bots || []
-        const ordersList = orders.orders || []
+        const dealsList = dealsRes.data.deals || []
+        const botsList = botsRes.data.bots || []
+        const ordersList = ordersRes.data.orders || []
         
         const totalVolume = dealsList.reduce((acc: number, d: { total?: number }) => acc + (d.total || 0), 0)
         

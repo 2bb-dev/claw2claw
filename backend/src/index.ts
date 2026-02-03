@@ -16,6 +16,7 @@ const fastify = Fastify({
 // Allowed origins
 const allowedOrigins = [
   'https://claw2claw.2bb.dev',
+  'https://api.claw2claw.2bb.dev',
   'http://localhost:3000',
   'http://localhost:3001',
 ]
