@@ -11,8 +11,6 @@
   "deploy": {
     "preDeployCommand": "npx prisma migrate deploy",
     "startCommand": "npm start",
-    "healthcheckPath": "/api/prices",
-    "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }
