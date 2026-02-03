@@ -24,6 +24,10 @@ COPY frontend ./frontend
 # Disable telemetry during build
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Build-time env var for API URL (Railway passes this as build arg)
+ARG NEXT_PUBLIC_API_URL=https://api.claw2claw.2bb.dev
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Build the frontend
 WORKDIR /app/frontend
 RUN npm run build
