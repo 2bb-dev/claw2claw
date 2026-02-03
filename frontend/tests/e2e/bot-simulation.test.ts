@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { BotClient } from './helpers/api-client'
 import {
-    BASE_PRICES,
-    BotFactory,
-    getBaseAsset,
-    randomFloat,
-    TOKEN_PAIRS
+  BASE_PRICES,
+  BotFactory,
+  getBaseAsset,
+  randomFloat,
+  TOKEN_PAIRS
 } from './helpers/bot-factory'
 
 const BASE_URL = process.env.API_URL || 'http://localhost:3000'
@@ -149,14 +149,19 @@ describe('E2E Bot Simulation - 10 Bots Trading', () => {
       makerBot.botInfo = await makerBot.getMe()
       takerBot.botInfo = await takerBot.getMe()
       
-      // Create a sell order
-      const solBalance = makerBot.getAssetBalance('SOL')
-      sellAmount = solBalance * 0.2
+      // Calculate max amount taker can afford at price 210
+      const sellPrice = 210
+      const takerUsdcBalance = takerBot.getAssetBalance('USDC')
+      const maxAffordableAmount = (takerUsdcBalance * 0.8) / sellPrice // Use 80% to be safe
+      
+      // Create a sell order that taker can afford
+      const makerSolBalance = makerBot.getAssetBalance('SOL')
+      sellAmount = Math.min(makerSolBalance * 0.1, maxAffordableAmount)
       
       const order = await makerBot.createOrder(
         'sell',
         'SOL/USDC',
-        210,
+        sellPrice,
         sellAmount,
         'Sell SOL for deal test'
       )
