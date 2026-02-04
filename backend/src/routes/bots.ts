@@ -1,40 +1,22 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
-import { prisma } from '../db.js'
+import type { Prisma } from '@prisma/client'
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { Address } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
-
-// Reference prices for crypto assets
-const CRYPTO_ASSETS = [
-  { symbol: 'BTC', usdPrice: 97000 },
-  { symbol: 'ETH', usdPrice: 3200 },
-  { symbol: 'SOL', usdPrice: 210 },
-  { symbol: 'USDC', usdPrice: 1 },
-  { symbol: 'DOGE', usdPrice: 0.32 },
-  { symbol: 'AVAX', usdPrice: 35 },
-  { symbol: 'MATIC', usdPrice: 0.45 },
-]
-
-const TOTAL_PORTFOLIO_VALUE = 1000
-
-function generateRandomAssetPack() {
-  const weights = CRYPTO_ASSETS.map(() => Math.random())
-  const totalWeight = weights.reduce((a, b) => a + b, 0)
-  const normalizedWeights = weights.map(w => w / totalWeight)
-  
-  return CRYPTO_ASSETS.map((asset, i) => {
-    const usdAllocation = TOTAL_PORTFOLIO_VALUE * normalizedWeights[i]
-    const amount = usdAllocation / asset.usdPrice
-    return {
-      symbol: asset.symbol,
-      amount: parseFloat(amount.toFixed(8)),
-      usdPrice: asset.usdPrice,
-    }
-  })
-}
+import { prisma } from '../db.js'
+import { generateBotEnsSubdomain, getEnsProfile, registerBotBasename, resolveEnsToAddress } from '../services/ens.js'
+import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
 
 interface RegisterBody {
   name: string
   humanOwner: string
   strategy?: Record<string, unknown>
+  createWallet?: boolean  // Optional: create AA wallet
+}
+
+interface Asset {
+  symbol: string
+  amount: number
+  usdPrice: number
 }
 
 export async function botsRoutes(fastify: FastifyInstance) {
@@ -59,14 +41,15 @@ export async function botsRoutes(fastify: FastifyInstance) {
       success: true,
       bots: bots.map(bot => {
         const portfolioValue = bot.assets.reduce(
-          (total, asset) => total + (asset.amount * asset.usdPrice), 
+          (total: number, asset: Asset) => total + (asset.amount * asset.usdPrice), 
           0
         )
         return {
           id: bot.id,
           name: bot.name,
           ensName: bot.ensName,
-          assets: bot.assets.map(a => ({
+          walletAddress: bot.walletAddress,
+          assets: bot.assets.map((a: Asset) => ({
             symbol: a.symbol,
             amount: a.amount,
             usdValue: parseFloat((a.amount * a.usdPrice).toFixed(2))
@@ -77,6 +60,83 @@ export async function botsRoutes(fastify: FastifyInstance) {
           dealsCount: bot._count.dealsAsMaker + bot._count.dealsAsTaker
         }
       })
+    }
+  })
+
+  // GET /api/bots/:id - Get bot by ID (for portfolio page)
+  fastify.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
+    const { id } = request.params
+    
+    const bot = await prisma.bot.findUnique({
+      where: { id },
+      include: {
+        assets: true,
+        orders: {
+          where: { status: 'open' },
+          orderBy: { createdAt: 'desc' },
+          take: 20
+        },
+        _count: {
+          select: {
+            orders: true,
+            dealsAsMaker: true,
+            dealsAsTaker: true
+          }
+        }
+      }
+    })
+    
+    if (!bot) {
+      return reply.status(404).send({ error: 'Bot not found' })
+    }
+    
+    const portfolioValue = bot.assets.reduce(
+      (total: number, asset: Asset) => total + (asset.amount * asset.usdPrice), 
+      0
+    )
+    
+    // Fetch ENS profile if bot has ENS name
+    let ensProfile = null
+    if (bot.ensName) {
+      ensProfile = await getEnsProfile(bot.ensName)
+    }
+    
+    const totalDeals = bot._count.dealsAsMaker + bot._count.dealsAsTaker
+    
+    return {
+      success: true,
+      bot: {
+        id: bot.id,
+        name: bot.name,
+        ensName: bot.ensName,
+        walletAddress: bot.walletAddress,
+        ensProfile,
+        assets: bot.assets.map((a: Asset) => ({
+          symbol: a.symbol,
+          amount: a.amount,
+          usdValue: parseFloat((a.amount * a.usdPrice).toFixed(2)),
+          percentOfPortfolio: portfolioValue > 0 
+            ? parseFloat(((a.amount * a.usdPrice / portfolioValue) * 100).toFixed(1))
+            : 0
+        })),
+        totalPortfolioValue: parseFloat(portfolioValue.toFixed(2)),
+        openOrders: bot.orders.map(order => ({
+          id: order.id,
+          type: order.type,
+          tokenPair: order.tokenPair,
+          price: order.price,
+          amount: order.amount,
+          createdAt: order.createdAt
+        })),
+        stats: {
+          totalOrders: bot._count.orders,
+          totalDeals,
+          successRate: bot._count.orders > 0 
+            ? parseFloat(((totalDeals / bot._count.orders) * 100).toFixed(1))
+            : 0
+        },
+        createdAt: bot.createdAt,
+      }
     }
   })
 
@@ -91,9 +151,20 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
     
     const portfolioValue = bot.assets.reduce(
-      (total, asset) => total + (asset.amount * asset.usdPrice), 
+      (total: number, asset: Asset) => total + (asset.amount * asset.usdPrice), 
       0
     )
+    
+    // Get wallet balance if configured
+    let walletBalance = null
+    if (bot.walletAddress) {
+      try {
+        const balance = await getWalletBalance(bot.walletAddress)
+        walletBalance = balance.toString()
+      } catch {
+        // Wallet balance fetch failed, continue without it
+      }
+    }
     
     return {
       success: true,
@@ -102,8 +173,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
         name: bot.name,
         humanOwner: bot.humanOwner,
         ensName: bot.ensName,
+        walletAddress: bot.walletAddress,
+        walletBalance,
         strategy: bot.strategy,
-        assets: bot.assets.map(a => ({
+        assets: bot.assets.map((a: Asset) => ({
           symbol: a.symbol,
           amount: a.amount,
           usdValue: parseFloat((a.amount * a.usdPrice).toFixed(2))
@@ -117,7 +190,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
   // POST /api/bots/register - Register a new bot
   fastify.post<{ Body: RegisterBody }>('/register', async (request, reply) => {
     try {
-      const { name, humanOwner, strategy } = request.body
+      const { name, humanOwner, strategy, createWallet = true } = request.body
       
       if (!name || !humanOwner) {
         return reply.status(400).send({
@@ -126,50 +199,137 @@ export async function botsRoutes(fastify: FastifyInstance) {
       }
       
       const apiKey = generateApiKey()
-      const assetPack = generateRandomAssetPack()
       
+      // Create AA wallet if requested and configured
+      let walletAddress: string | null = null
+      let encryptedWalletKey: string | null = null
+      
+      if (createWallet && isAAConfigured()) {
+        try {
+          const wallet = await createBotWallet()
+          walletAddress = wallet.walletAddress
+          encryptedWalletKey = wallet.encryptedPrivateKey
+        } catch (error) {
+          console.error('Wallet creation failed:', error)
+          // Continue without wallet - can be created later
+        }
+      }
+      
+      // Register on-chain Basename (or fallback to off-chain subdomain)
+      let ensName: string
+      let ensRegistrationTx: string | null = null
+      
+      if (walletAddress) {
+        // Register Basename with wallet as owner
+        const basenameResult = await registerBotBasename(name, walletAddress as Address)
+        ensName = basenameResult.ensName
+        ensRegistrationTx = basenameResult.txHash || null
+        
+        if (basenameResult.error && !basenameResult.success) {
+          console.warn('Basename registration issue:', basenameResult.error)
+        }
+      } else {
+        // No wallet - use off-chain subdomain
+        ensName = generateBotEnsSubdomain(name)
+      }
+      
+      // Create bot with empty assets - real assets come from on-chain deposits
       const bot = await prisma.bot.create({
         data: {
           name,
           apiKey,
           humanOwner,
-          strategy: strategy || {},
-          assets: {
-            create: assetPack.map(asset => ({
-              symbol: asset.symbol,
-              amount: asset.amount,
-              usdPrice: asset.usdPrice,
-            }))
-          }
+          ensName,
+          walletAddress,
+          encryptedWalletKey,
+          strategy: (strategy || {}) as Prisma.InputJsonValue,
         },
         include: {
           assets: true
         }
       })
       
-      const portfolioValue = bot.assets.reduce(
-        (total, asset) => total + (asset.amount * asset.usdPrice), 
-        0
-      )
-      
       return {
         success: true,
         bot: {
           id: bot.id,
-          name: bot.name,
           apiKey: bot.apiKey,
-          assets: bot.assets.map(a => ({
-            symbol: a.symbol,
-            amount: a.amount,
-            usdValue: parseFloat((a.amount * a.usdPrice).toFixed(2))
-          })),
-          totalPortfolioValue: parseFloat(portfolioValue.toFixed(2)),
+          ensName: bot.ensName,
+          wallet: bot.walletAddress,
         },
-        important: "⚠️ SAVE YOUR API KEY! You need it for all requests."
+        important: "SAVE YOUR API KEY! You need it for all requests.",
+        ...(walletAddress && {
+          walletInfo: `Your bot wallet is ready. Deposit assets to: ${walletAddress}`
+        }),
+        ...(ensRegistrationTx && {
+          ensRegistration: {
+            txHash: ensRegistrationTx,
+            name: ensName,
+            network: 'base-sepolia'
+          }
+        })
       }
     } catch (error) {
       console.error('Registration error:', error)
       return reply.status(500).send({ error: 'Registration failed' })
     }
   })
+
+  // GET /api/bots/:id/wallet - Get wallet details
+  fastify.get<{ Params: { id: string } }>('/:id/wallet', async (request, reply) => {
+    const bot = await authenticateBot(request)
+    
+    if (!bot) {
+      return reply.status(401).send({
+        error: 'Unauthorized. Provide valid API key in Authorization header.'
+      })
+    }
+    
+    if (request.params.id !== bot.id) {
+      return reply.status(403).send({ error: 'Access denied' })
+    }
+    
+    if (!bot.walletAddress) {
+      return reply.status(404).send({ error: 'No wallet configured for this bot' })
+    }
+    
+    try {
+      const balance = await getWalletBalance(bot.walletAddress)
+      
+      return {
+        success: true,
+        wallet: {
+          address: bot.walletAddress,
+          ensName: bot.ensName,
+          balance: balance.toString(),
+          balanceFormatted: `${(Number(balance) / 1e18).toFixed(6)} ETH`
+        }
+      }
+    } catch (error) {
+      console.error('Wallet balance fetch error:', error)
+      return reply.status(500).send({ error: 'Failed to fetch wallet balance' })
+    }
+  })
+
+  // POST /api/ens/resolve - Resolve ENS name to address
+  fastify.post<{ Body: { ensName: string } }>('/ens/resolve', async (request, reply) => {
+    const { ensName } = request.body
+    
+    if (!ensName) {
+      return reply.status(400).send({ error: 'ensName is required' })
+    }
+    
+    const address = await resolveEnsToAddress(ensName)
+    
+    if (!address) {
+      return reply.status(404).send({ error: 'ENS name not found or has no address' })
+    }
+    
+    return {
+      success: true,
+      ensName,
+      address
+    }
+  })
 }
+

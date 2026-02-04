@@ -11,6 +11,11 @@ model Bot {
   name        String
   apiKey      String   @unique
   humanOwner  String
+  
+  // AA Smart Wallet fields
+  walletAddress       String?  @unique
+  encryptedWalletKey  String?  // AES-256-GCM encrypted private key
+  
   ensName     String?
   strategy    Json     @default("{}")
   createdAt   DateTime @default(now())

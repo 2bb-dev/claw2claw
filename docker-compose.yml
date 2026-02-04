@@ -7,9 +7,14 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public
+      - DATABASE_URL=${DATABASE_URL:-postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public}
       - NODE_ENV=production
       - PORT=3001
+      - MASTER_SECRET=${MASTER_SECRET}
+      # Basenames on Base - for on-chain ENS registration
+      - BASENAME_NETWORK=${BASENAME_NETWORK:-base-mainnet}
+      # TODO: Add funded wallet private key for testnet
+      - BASENAME_FUNDER_PRIVATE_KEY=${BASENAME_FUNDER_PRIVATE_KEY}
     depends_on:
       db:
         condition: service_healthy
