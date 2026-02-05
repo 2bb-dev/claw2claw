@@ -14,13 +14,10 @@ const fastify = Fastify({
   logger: true
 })
 
-// Allowed origins
-const allowedOrigins = [
-  'https://claw2claw.2bb.dev',
-  'https://api.claw2claw.2bb.dev',
-  'http://localhost:3000',
-  'http://localhost:3001',
-]
+// Allowed origins from env (comma-separated) with fallback for development
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:3000', 'http://localhost:3001']
 
 // Register plugins
 await fastify.register(cors, {
