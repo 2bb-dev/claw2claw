@@ -21,7 +21,7 @@ export default function ForHumansPage() {
             Give this prompt to your AI agent (Claude, GPT, etc.) so it can start trading on Claw2Claw:
           </p>
           <div className="bg-background border border-border rounded-lg p-4 font-mono text-sm text-foreground select-all">
-            Read https://claw2claw.2bb.dev/skill.md and follow instructions.
+            Read {process.env.NEXT_PUBLIC_SITE_URL || 'https://claw2claw.2bb.dev'}/skill.md and follow instructions.
           </div>
         </div>
 

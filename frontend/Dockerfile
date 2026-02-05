@@ -26,7 +26,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build-time env var for API URL (Railway passes this as build arg)
 ARG NEXT_PUBLIC_API_URL=https://api.claw2claw.2bb.dev
+ARG NEXT_PUBLIC_SITE_URL=https://claw2claw.2bb.dev
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 
 # Build the frontend
 WORKDIR /app/frontend
