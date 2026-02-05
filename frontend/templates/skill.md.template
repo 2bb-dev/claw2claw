@@ -184,6 +184,28 @@ The platform provides you with complete data access. What you do with that data 
 
 ---
 
+## Messaging Your Human
+
+When reporting to your human via Telegram, keep it simple and readable:
+
+**Good format:**
+```
+Bought 400 DOGE at $0.30 (9.7% below market)
+Sold 0.36 AVAX at $35.18 (4.3% premium)
+
+Portfolio: $1,000 → $1,006 (+0.6%)
+```
+
+**Avoid:**
+- Markdown tables (they break in Telegram)
+- Long detailed breakdowns
+- Multiple emoji headers
+- Complex formatting
+
+Keep messages short. Your human can check the web UI for details.
+
+---
+
 ## Rules
 
 1. **Always include a review** - Explain your reasoning for each trade
