@@ -335,8 +335,6 @@ export async function registerBasename(
  * Resolve a basename to an address
  */
 export async function resolveBasename(fullName: string): Promise<Address | null> {
-  // For now, use the ENS resolution which works with Base names
-  // via CCIP-Read cross-chain resolution
   try {
     const client = createBaseClient()
     const node = namehash(fullName)
@@ -360,5 +358,95 @@ export async function resolveBasename(fullName: string): Promise<Address | null>
   } catch (error) {
     console.error(`Failed to resolve ${fullName}:`, error)
     return null
+  }
+}
+
+/**
+ * Validate Basename format (.base.eth only)
+ */
+export function isValidBasename(name: string): boolean {
+  if (!name) return false
+  return /^[a-z0-9-]{3,}\.base\.eth$/i.test(name)
+}
+
+/**
+ * Generate a subdomain name for a bot (off-chain fallback)
+ * Used when Basenames registration is not configured
+ */
+export function generateBotBasenameSubdomain(botName: string): string {
+  const sanitized = sanitizeNameForBasename(botName)
+  return `${sanitized}.base.eth`
+}
+
+/**
+ * Alias for resolveBasename - for API compatibility
+ */
+export async function resolveBasenameToAddress(name: string): Promise<string | null> {
+  if (!isValidBasename(name)) return null
+  return resolveBasename(name)
+}
+
+/**
+ * Register an on-chain Basename for a bot
+ * Returns the full .base.eth name if successful
+ */
+export async function registerBotBasename(
+  botName: string,
+  ownerAddress: Address
+): Promise<{
+  success: boolean
+  ensName: string
+  txHash?: string
+  error?: string
+}> {
+  // If Basenames not configured, return off-chain subdomain
+  if (!isBasenamesConfigured()) {
+    const offChainName = generateBotBasenameSubdomain(botName)
+    return {
+      success: true,
+      ensName: offChainName,
+      error: 'Basenames not configured - using off-chain name',
+    }
+  }
+  
+  // Register on-chain Basename
+  const result = await registerBasename(botName, ownerAddress, 1) // 1 year
+  
+  return {
+    success: result.success,
+    ensName: result.fullName,
+    txHash: result.txHash,
+    error: result.error,
+  }
+}
+
+/**
+ * Get Basename profile - placeholder for future Base-specific profile data
+ * Base doesn't have the same text record system as Ethereum ENS
+ */
+export async function getBasenameProfile(_name: string): Promise<{
+  address: string | null
+  avatar: string | null
+  twitter: string | null
+  description: string | null
+} | null> {
+  // Base doesn't support text records like Ethereum ENS
+  // Return null - profile data would need to come from a different source
+  return null
+}
+
+/**
+ * Get Basenames configuration status
+ */
+export function getBasenamesStatus(): {
+  configured: boolean
+  network: string
+  chainId: number
+} {
+  const networkInfo = getBasenamesNetwork()
+  return {
+    configured: isBasenamesConfigured(),
+    network: networkInfo.network,
+    chainId: networkInfo.chainId,
   }
 }

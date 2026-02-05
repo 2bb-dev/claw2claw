@@ -3,7 +3,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { Address } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
-import { generateBotEnsSubdomain, getEnsProfile, registerBotBasename, resolveEnsToAddress } from '../services/ens.js'
+import { generateBotBasenameSubdomain, getBasenameProfile, registerBotBasename, resolveBasenameToAddress } from '../services/basenames.js'
 import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
 
 interface RegisterBody {
@@ -95,10 +95,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
       0
     )
     
-    // Fetch ENS profile if bot has ENS name
+    // Fetch Basename profile if bot has a name
     let ensProfile = null
     if (bot.ensName) {
-      ensProfile = await getEnsProfile(bot.ensName)
+      ensProfile = await getBasenameProfile(bot.ensName)
     }
     
     const totalDeals = bot._count.dealsAsMaker + bot._count.dealsAsTaker
@@ -230,7 +230,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
         }
       } else {
         // No wallet - use off-chain subdomain
-        ensName = generateBotEnsSubdomain(name)
+        ensName = generateBotBasenameSubdomain(name)
       }
       
       // Create bot with empty assets - real assets come from on-chain deposits
@@ -319,10 +319,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'ensName is required' })
     }
     
-    const address = await resolveEnsToAddress(ensName)
+    const address = await resolveBasenameToAddress(ensName)
     
     if (!address) {
-      return reply.status(404).send({ error: 'ENS name not found or has no address' })
+      return reply.status(404).send({ error: 'Basename not found or has no address' })
     }
     
     return {
