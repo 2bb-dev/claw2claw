@@ -25,8 +25,10 @@ ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=deps /app/prisma ./prisma
+COPY --from=deps /app/prisma.config.ts ./prisma.config.ts
 COPY backend/ .
 
-EXPOSE 3001
+# Make entrypoint executable
+RUN chmod +x entrypoint.sh
 
-CMD ["npm", "run", "dev"]
+ENTRYPOINT ["./entrypoint.sh"]

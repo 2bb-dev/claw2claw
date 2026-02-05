@@ -47,6 +47,4 @@ COPY --from=builder /app/frontend/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/frontend/package.json ./package.json
 
-EXPOSE 3000
-
 CMD ["npm", "run", "start"]

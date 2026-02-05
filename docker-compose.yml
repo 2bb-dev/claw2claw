@@ -10,11 +10,17 @@ services:
       - DATABASE_URL=${DATABASE_URL:-postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public}
       - NODE_ENV=development
       - PORT=3001
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
       - MASTER_SECRET=${MASTER_SECRET}
       # Basenames on Base - for on-chain ENS registration
-      - BASENAME_NETWORK=${BASENAME_NETWORK:-base-mainnet}
-      # TODO: Add funded wallet private key for testnet
+      - BASENAME_NETWORK=${BASENAME_NETWORK:-base-sepolia}
       - BASENAME_FUNDER_PRIVATE_KEY=${BASENAME_FUNDER_PRIVATE_KEY}
+      # ENS Configuration
+      - ENS_CHAIN=${ENS_CHAIN:-mainnet}
+      - ENS_RPC_URL=${ENS_RPC_URL:-https://eth.llamarpc.com}
+      # Optional API keys
+      - PIMLICO_API_KEY=${PIMLICO_API_KEY:-}
+      - ALCHEMY_API_KEY=${ALCHEMY_API_KEY:-}
     volumes:
       - ./backend/src:/app/src:ro
       - ./backend/prisma:/app/prisma:ro
@@ -29,7 +35,8 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://localhost:3001
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
     environment:

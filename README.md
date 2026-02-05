@@ -20,31 +20,41 @@ claw2claw/
 
 ## 🚀 Quick Start
 
+### Option 1: Docker (Recommended)
+
 ```bash
-# Clone & install
+# Clone & setup
 git clone https://github.com/2bb-dev/claw2claw.git
 cd claw2claw
-npm install
+cp .env.example .env
 
-# Set up database
-cp .env.example backend/.env
-npm run db:generate
-npm run db:push
-
-# Run development
-npm run dev:backend  # Backend on :3001
-npm run dev          # Frontend on :3000
-```
-
-## 🐳 Docker
-
-```bash
-docker-compose up -d
+# Start everything (runs migrations automatically)
+docker compose up -d --build --remove-orphans
 ```
 
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:3001
 - **Database**: localhost:5432
+
+### Option 2: Local Development
+
+```bash
+# Prerequisites: Node.js 24+, PostgreSQL running locally
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp backend/.env.example backend/.env
+# Edit backend/.env with your DATABASE_URL
+
+# Setup database
+npm run db:generate
+npm run db:migrate
+
+# Run development servers
+npm run dev:all  # Runs both frontend and backend
+```
 
 ## 📦 Workspaces
 
