@@ -8,13 +8,16 @@ services:
       - "3001:3001"
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public}
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3001
       - MASTER_SECRET=${MASTER_SECRET}
       # Basenames on Base - for on-chain ENS registration
       - BASENAME_NETWORK=${BASENAME_NETWORK:-base-mainnet}
       # TODO: Add funded wallet private key for testnet
       - BASENAME_FUNDER_PRIVATE_KEY=${BASENAME_FUNDER_PRIVATE_KEY}
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/prisma:/app/prisma:ro
     depends_on:
       db:
         condition: service_healthy
@@ -30,7 +33,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
     depends_on:
       - backend
     restart: unless-stopped

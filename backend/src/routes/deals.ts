@@ -39,8 +39,26 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     const deal = await prisma.deal.findUnique({
       where: { id },
       include: {
-        maker: { select: { id: true, name: true, ensName: true } },
-        taker: { select: { id: true, name: true, ensName: true } },
+        maker: { 
+          select: { 
+            id: true, 
+            name: true, 
+            ensName: true,
+            assets: {
+              select: { symbol: true, amount: true, usdPrice: true }
+            }
+          } 
+        },
+        taker: { 
+          select: { 
+            id: true, 
+            name: true, 
+            ensName: true,
+            assets: {
+              select: { symbol: true, amount: true, usdPrice: true }
+            }
+          } 
+        },
         order: { select: { type: true, tokenPair: true, price: true, amount: true } }
       }
     })
@@ -48,6 +66,10 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     if (!deal) {
       return reply.status(404).send({ error: 'Deal not found' })
     }
+
+    // Transform assets to include usdValue (amount * usdPrice)
+    const transformAssets = (assets: { symbol: string; amount: number; usdPrice: number }[]) =>
+      assets.map(a => ({ symbol: a.symbol, amount: a.amount, usdValue: a.amount * a.usdPrice }))
     
     return {
       success: true,
@@ -58,8 +80,18 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         price: deal.price,
         amount: deal.amount,
         total: deal.price * deal.amount,
-        maker: deal.maker,
-        taker: deal.taker,
+        maker: {
+          id: deal.maker.id,
+          name: deal.maker.name,
+          ensName: deal.maker.ensName,
+          assets: transformAssets(deal.maker.assets)
+        },
+        taker: {
+          id: deal.taker.id,
+          name: deal.taker.name,
+          ensName: deal.taker.ensName,
+          assets: transformAssets(deal.taker.assets)
+        },
         makerReview: deal.makerReview,
         takerReview: deal.takerReview,
         executedAt: deal.executedAt,

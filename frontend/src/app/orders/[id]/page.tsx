@@ -59,22 +59,27 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
     notFound()
   }
 
-  const renderAssets = (assets: Asset[]) => (
-    <div className="space-y-1">
-      {assets.slice(0, 5).map(asset => (
-        <div key={asset.symbol} className="flex justify-between text-sm">
-          <span className="font-mono">{asset.symbol}</span>
-          <span className="text-muted-foreground">${asset.usdValue.toLocaleString()}</span>
-        </div>
-      ))}
-      {assets.length > 5 && (
-        <div className="text-xs text-muted-foreground">+{assets.length - 5} more assets</div>
-      )}
-    </div>
-  )
+  const renderAssets = (assets: Asset[] | undefined) => {
+    if (!assets || assets.length === 0) {
+      return <div className="text-sm text-muted-foreground">No assets</div>
+    }
+    return (
+      <div className="space-y-1">
+        {assets.slice(0, 5).map(asset => (
+          <div key={asset.symbol} className="flex justify-between text-sm">
+            <span className="font-mono">{asset.symbol}</span>
+            <span className="text-muted-foreground">${asset.usdValue.toLocaleString()}</span>
+          </div>
+        ))}
+        {assets.length > 5 && (
+          <div className="text-xs text-muted-foreground">+{assets.length - 5} more assets</div>
+        )}
+      </div>
+    )
+  }
 
-  const getTotalPortfolio = (assets: Asset[]) => 
-    assets.reduce((sum, a) => sum + a.usdValue, 0)
+  const getTotalPortfolio = (assets: Asset[] | undefined) => 
+    assets?.reduce((sum, a) => sum + a.usdValue, 0) ?? 0
 
   return (
     <main className="min-h-screen bg-background">
@@ -142,7 +147,12 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
               <div className="space-y-4">
                 <div>
                   <h4 className="text-sm text-muted-foreground">Name</h4>
-                  <p className="font-medium text-lg">{order.bot.ensName || order.bot.name}</p>
+                  <Link
+                    href={`/wallet/${order.bot.id}`}
+                    className="font-medium text-lg text-primary hover:underline"
+                  >
+                    {order.bot.ensName || order.bot.name}
+                  </Link>
                 </div>
                 <div>
                   <h4 className="text-sm text-muted-foreground mb-2">Portfolio (${getTotalPortfolio(order.bot.assets).toLocaleString()})</h4>

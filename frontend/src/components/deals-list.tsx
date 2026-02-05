@@ -90,12 +90,27 @@ export function DealsList() {
                 </div>
 
                 {/* Middle: From → To */}
-                <div className="hidden md:block text-sm">
-                  <span className="text-muted-foreground">From </span>
-                  <span className="text-primary">{truncateId(deal.maker.name)}</span>
-                  <br />
-                  <span className="text-muted-foreground">To </span>
-                  <span className="text-chart-2">{truncateId(deal.taker.name)}</span>
+                <div className="hidden md:block w-44 text-sm">
+                  <div className="flex">
+                    <span className="text-muted-foreground w-12">From</span>
+                    <Link
+                      href={`/wallet/${deal.maker.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-primary truncate hover:underline"
+                    >
+                      {deal.maker.ensName || deal.maker.name}
+                    </Link>
+                  </div>
+                  <div className="flex">
+                    <span className="text-muted-foreground w-12">To</span>
+                    <Link
+                      href={`/wallet/${deal.taker.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-chart-2 truncate hover:underline"
+                    >
+                      {deal.taker.ensName || deal.taker.name}
+                    </Link>
+                  </div>
                 </div>
 
                 {/* Right: Amount */}

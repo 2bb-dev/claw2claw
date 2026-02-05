@@ -3,6 +3,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 
@@ -59,22 +60,27 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
     notFound()
   }
 
-  const renderAssets = (assets: Asset[]) => (
-    <div className="space-y-1">
-      {assets.slice(0, 3).map(asset => (
-        <div key={asset.symbol} className="flex justify-between text-sm">
-          <span className="font-mono">{asset.symbol}</span>
-          <span className="text-muted-foreground">${asset.usdValue.toLocaleString()}</span>
-        </div>
-      ))}
-      {assets.length > 3 && (
-        <div className="text-xs text-muted-foreground">+{assets.length - 3} more assets</div>
-      )}
-    </div>
-  )
+  const renderAssets = (assets: Asset[] | undefined) => {
+    if (!assets || assets.length === 0) {
+      return <div className="text-sm text-muted-foreground">No assets</div>
+    }
+    return (
+      <div className="space-y-1">
+        {assets.slice(0, 3).map(asset => (
+          <div key={asset.symbol} className="flex justify-between text-sm">
+            <span className="font-mono">{asset.symbol}</span>
+            <span className="text-muted-foreground">${asset.usdValue.toLocaleString()}</span>
+          </div>
+        ))}
+        {assets.length > 3 && (
+          <div className="text-xs text-muted-foreground">+{assets.length - 3} more assets</div>
+        )}
+      </div>
+    )
+  }
 
-  const getTotalPortfolio = (assets: Asset[]) => 
-    assets.reduce((sum, a) => sum + a.usdValue, 0)
+  const getTotalPortfolio = (assets: Asset[] | undefined) => 
+    assets?.reduce((sum, a) => sum + a.usdValue, 0) ?? 0
 
   return (
     <main className="min-h-screen bg-background">
@@ -132,11 +138,20 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
               <div className="space-y-4">
                 <div>
                   <h4 className="text-sm text-muted-foreground">Bot</h4>
-                  <p className="font-medium text-lg">{deal.maker.ensName || deal.maker.name}</p>
+                  {deal.maker?.id ? (
+                    <Link
+                      href={`/wallet/${deal.maker.id}`}
+                      className="font-medium text-lg text-primary hover:underline"
+                    >
+                      {deal.maker.ensName || deal.maker.name}
+                    </Link>
+                  ) : (
+                    <p className="font-medium text-lg">Unknown</p>
+                  )}
                 </div>
                 <div>
-                  <h4 className="text-sm text-muted-foreground mb-2">Portfolio (${getTotalPortfolio(deal.maker.assets).toLocaleString()})</h4>
-                  {renderAssets(deal.maker.assets)}
+                  <h4 className="text-sm text-muted-foreground mb-2">Portfolio (${getTotalPortfolio(deal.maker?.assets).toLocaleString()})</h4>
+                  {renderAssets(deal.maker?.assets)}
                 </div>
                 {deal.makerReview && (
                   <div>
@@ -159,11 +174,20 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
               <div className="space-y-4">
                 <div>
                   <h4 className="text-sm text-muted-foreground">Bot</h4>
-                  <p className="font-medium text-lg">{deal.taker.ensName || deal.taker.name}</p>
+                  {deal.taker?.id ? (
+                    <Link
+                      href={`/wallet/${deal.taker.id}`}
+                      className="font-medium text-lg text-primary hover:underline"
+                    >
+                      {deal.taker.ensName || deal.taker.name}
+                    </Link>
+                  ) : (
+                    <p className="font-medium text-lg">Unknown</p>
+                  )}
                 </div>
                 <div>
-                  <h4 className="text-sm text-muted-foreground mb-2">Portfolio (${getTotalPortfolio(deal.taker.assets).toLocaleString()})</h4>
-                  {renderAssets(deal.taker.assets)}
+                  <h4 className="text-sm text-muted-foreground mb-2">Portfolio (${getTotalPortfolio(deal.taker?.assets).toLocaleString()})</h4>
+                  {renderAssets(deal.taker?.assets)}
                 </div>
                 {deal.takerReview && (
                   <div>

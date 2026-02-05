@@ -86,12 +86,16 @@ export function OrdersList() {
                   </div>
 
                   {/* Middle: Bot */}
-                  <div className="hidden md:block">
+                  <div className="hidden md:block w-40 text-left">
                     <div className="text-sm">
                       Bot{' '}
-                      <span className="text-primary">
+                      <Link
+                        href={`/wallet/${order.bot.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:underline"
+                      >
                         {order.bot.ensName || order.bot.name}
-                      </span>
+                      </Link>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {order.type.toUpperCase()} {order.amount} {order.tokenPair.split('/')[0]}
