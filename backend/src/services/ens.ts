@@ -20,17 +20,18 @@ const IS_MAINNET = process.env.ENS_MAINNET === 'true'
 const ENS_CHAIN = IS_MAINNET ? mainnet : sepolia
 
 // Contract addresses differ per network
-// From: https://docs.ens.domains/learn/deployments
+// Mainnet: https://docs.ens.domains/learn/deployments
+// Sepolia: https://github.com/ensdomains/ens-contracts/tree/staging/deployments/sepolia
 const ENS_CONTRACTS = IS_MAINNET
   ? {
       registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const,
       nameWrapper: '0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401' as const,
-      publicResolver: '0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63' as const,
+      publicResolver: '0xF29100983E058B709F3D539b0c765937B804AC15' as const,
     }
   : {
       registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const,
-      nameWrapper: '0xab50971078225D365994dc1Edcb9b7FD72Bb4862' as const,
-      publicResolver: '0x9010A27463717360cAD99CEA8bD39b8705CCA238' as const,
+      nameWrapper: '0x0635513f179D50A207757E05759CbD106d7dFcE8' as const,
+      publicResolver: '0xE99638b40E4Fff0129D56f03b55b6bbC4BBE49b5' as const,
     }
 
 // Parent domain — the one-time registered domain (normalized at startup)
@@ -159,7 +160,7 @@ const publicResolverAbi = [
 // ============================================================
 
 const RPC_URL = process.env.ENS_RPC_URL
-  || (IS_MAINNET ? 'https://eth.llamarpc.com' : 'https://rpc.sepolia.org')
+  || (IS_MAINNET ? 'https://eth.llamarpc.com' : 'https://ethereum-sepolia-rpc.publicnode.com')
 
 /** Public client for read-only ENS calls (no gas) */
 const publicClient = createPublicClient({
