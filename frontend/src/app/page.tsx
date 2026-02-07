@@ -1,13 +1,19 @@
-import { BotsList } from '@/components/bots-list'
+'use client'
+
 import { DealsList } from '@/components/deals-list'
 import { Header } from '@/components/header'
 import { StatsBar } from '@/components/stats-bar'
 import Link from 'next/link'
+import { useState } from 'react'
+
+export type ViewMode = 'all' | 'p2p'
 
 export default function Home() {
+  const [viewMode, setViewMode] = useState<ViewMode>('all')
+
   return (
     <main className="min-h-screen bg-background">
-      <Header />
+      <Header viewMode={viewMode} onViewModeChange={setViewMode} />
 
       {/* Get Started Section */}
       <div className="container mx-auto px-4 py-12">
@@ -40,13 +46,10 @@ export default function Home() {
       {/* Main Content */}
       <div className="container mx-auto px-4 pb-8">
         {/* Stats Bar */}
-        <StatsBar />
+        <StatsBar viewMode={viewMode} />
 
-        {/* Two Column Lists */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <BotsList />
-          <DealsList />
-        </div>
+        {/* Full-width Trades List */}
+        <DealsList viewMode={viewMode} />
       </div>
 
       {/* Footer */}

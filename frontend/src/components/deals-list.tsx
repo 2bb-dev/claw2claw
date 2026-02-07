@@ -4,6 +4,8 @@ import { api } from '@/lib/api'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+type ViewMode = 'all' | 'p2p'
+
 interface Deal {
   id: string
   txHash?: string
@@ -18,7 +20,11 @@ interface Deal {
   createdAt: string
 }
 
-export function DealsList() {
+interface DealsListProps {
+  viewMode: ViewMode
+}
+
+export function DealsList({ viewMode }: DealsListProps) {
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -39,13 +45,19 @@ export function DealsList() {
     return () => clearInterval(interval)
   }, [])
 
+  const filteredDeals = viewMode === 'p2p'
+    ? deals.filter((d) => d.regime === 'p2p')
+    : deals
+
   function timeAgo(dateString: string) {
     const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000)
     if (seconds < 60) return `${seconds} secs ago`
     const minutes = Math.floor(seconds / 60)
     if (minutes < 60) return `${minutes} min ago`
     const hours = Math.floor(minutes / 60)
-    return `${hours}h ago`
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
   }
 
   function truncateAddress(addr: string) {
@@ -53,23 +65,39 @@ export function DealsList() {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
+  function regimeLabel(regime?: string) {
+    if (!regime) return 'P2P'
+    if (regime.startsWith('lifi')) return 'LI.FI'
+    return 'P2P'
+  }
+
+  function regimeStyle(regime?: string) {
+    if (regime && regime.startsWith('lifi')) {
+      return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+    }
+    return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+  }
+
   return (
     <div className="bg-card border border-border rounded-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-foreground">Latest Deals</h3>
+        <h3 className="font-semibold text-foreground">Latest Trades</h3>
+        <span className="text-xs text-muted-foreground">
+          {filteredDeals.length} {viewMode === 'p2p' ? 'P2P' : 'total'} trades
+        </span>
       </div>
 
       {/* List */}
       <div className="divide-y divide-border">
         {loading ? (
           <div className="text-center text-muted-foreground py-12">Loading...</div>
-        ) : deals.length === 0 ? (
+        ) : filteredDeals.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
-            No deals yet
+            No {viewMode === 'p2p' ? 'P2P ' : ''}trades yet
           </div>
         ) : (
-          deals.slice(0, 6).map((deal) => (
+          filteredDeals.slice(0, 10).map((deal) => (
             <Link
               key={deal.id}
               href={`/deals/${deal.id}`}
@@ -84,10 +112,15 @@ export function DealsList() {
                     {deal.status === 'completed' ? '✓' : '⏳'}
                   </div>
                   <div>
-                    <div className="font-mono text-primary text-sm">
-                      {deal.txHash && !deal.txHash.startsWith('pending-')
-                        ? truncateAddress(deal.txHash)
-                        : `#${deal.id.slice(0, 8)}`}
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-primary text-sm">
+                        {deal.txHash && !deal.txHash.startsWith('pending-')
+                          ? truncateAddress(deal.txHash)
+                          : `#${deal.id.slice(0, 8)}`}
+                      </span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${regimeStyle(deal.regime)}`}>
+                        {regimeLabel(deal.regime)}
+                      </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {timeAgo(deal.createdAt)}
@@ -126,7 +159,7 @@ export function DealsList() {
           href="/deals"
           className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
         >
-          VIEW ALL DEALS →
+          VIEW ALL TRADES →
         </Link>
       </div>
     </div>
