@@ -3,15 +3,15 @@ import { isAddress } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
 import {
-    createBotSubdomain,
-    getBotProfile,
-    getDefaultBotRecords,
-    getEnsConfig,
-    getTextRecord,
-    isEnsConfigured,
-    resolveEnsName,
-    reverseResolve,
-    setBotTextRecords,
+  createBotSubdomain,
+  getBotProfile,
+  getDefaultBotRecords,
+  getEnsConfig,
+  getTextRecord,
+  isEnsConfigured,
+  resolveEnsName,
+  reverseResolve,
+  setBotTextRecords,
 } from '../services/ens.js'
 import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
 
@@ -30,7 +30,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
       select: {
         id: true,
         ensName: true,
-        walletAddress: true,
+        wallet: { select: { walletAddress: true } },
         createdAt: true,
       }
     })
@@ -40,7 +40,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
       bots: bots.map(bot => ({
         id: bot.id,
         ensName: bot.ensName,
-        walletAddress: bot.walletAddress,
+        walletAddress: bot.wallet?.walletAddress || null,
         createdAt: bot.createdAt,
       }))
     }
@@ -58,9 +58,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
     
     // Get wallet balance if configured
     let walletBalance = null
-    if (bot.walletAddress) {
+    const walletAddress = bot.wallet?.walletAddress
+    if (walletAddress) {
       try {
-        const balance = await getWalletBalance(bot.walletAddress)
+        const balance = await getWalletBalance(walletAddress)
         walletBalance = balance.toString()
       } catch {
         // Wallet balance fetch failed, continue without it
@@ -84,7 +85,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
       bot: {
         id: bot.id,
         ensName,
-        walletAddress: bot.walletAddress,
+        walletAddress: walletAddress || null,
         walletBalance,
         ensProfile,
         createdAt: bot.createdAt,
@@ -133,9 +134,16 @@ export async function botsRoutes(fastify: FastifyInstance) {
       const bot = await prisma.botAuth.create({
         data: {
           apiKey,
-          walletAddress,
-          encryptedWalletKey,
+          ...(walletAddress && encryptedWalletKey ? {
+            wallet: {
+              create: {
+                walletAddress,
+                encryptedWalletKey,
+              }
+            }
+          } : {}),
         },
+        include: { wallet: true },
       })
 
       // Determine ENS eligibility
@@ -181,7 +189,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
           id: bot.id,
           apiKey: bot.apiKey,
           ensName: null, // Will be populated async — check /api/bots/me
-          wallet: bot.walletAddress,
+          wallet: bot.wallet?.walletAddress || null,
         },
         ...(ensStatus && { ensStatus }),
         important: "SAVE YOUR API KEY! You need it for all requests.",
@@ -208,7 +216,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
       select: {
         id: true,
         ensName: true,
-        walletAddress: true,
+        wallet: { select: { walletAddress: true } },
         createdAt: true,
       }
     })
@@ -217,12 +225,13 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: 'Bot not found' })
     }
     
-    if (!bot.walletAddress) {
+    const walletAddress = bot.wallet?.walletAddress
+    if (!walletAddress) {
       return reply.status(404).send({ error: 'No wallet configured for this bot' })
     }
     
     try {
-      const balance = await getWalletBalance(bot.walletAddress)
+      const balance = await getWalletBalance(walletAddress)
       
       return {
         success: true,
@@ -232,7 +241,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
           createdAt: bot.createdAt,
         },
         wallet: {
-          address: bot.walletAddress,
+          address: walletAddress,
           ensName: bot.ensName || null,
           balance: balance.toString(),
           balanceFormatted: `${(Number(balance) / 1e18).toFixed(6)} ETH`

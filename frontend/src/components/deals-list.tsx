@@ -85,7 +85,9 @@ export function DealsList() {
                   </div>
                   <div>
                     <div className="font-mono text-primary text-sm">
-                      {truncateAddress(deal.id)}
+                      {deal.txHash && !deal.txHash.startsWith('pending-')
+                        ? truncateAddress(deal.txHash)
+                        : `#${deal.id.slice(0, 8)}`}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {timeAgo(deal.createdAt)}

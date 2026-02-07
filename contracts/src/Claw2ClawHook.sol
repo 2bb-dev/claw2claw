@@ -23,6 +23,7 @@ contract Claw2ClawHook is IHooks {
         uint128 minAmountOut;
         uint256 expiry;
         bool active;
+        bytes32 poolId;
     }
 
     // Events
@@ -48,6 +49,7 @@ contract Claw2ClawHook is IHooks {
     error TransferFailed();
     error OnlyPoolManager();
     error ZeroAddress();
+    error PoolKeyMismatch();
 
     // State
     address public admin;
@@ -91,11 +93,11 @@ contract Claw2ClawHook is IHooks {
         if (amountIn == 0 || minAmountOut == 0) revert InvalidAmounts();
         if (duration == 0) revert InvalidDuration();
         orderId = nextOrderId++;
-        orders[orderId] = Order(msg.sender, sellToken0, amountIn, minAmountOut, block.timestamp + duration, true);
+        bytes32 poolId = keccak256(abi.encode(key));
+        orders[orderId] = Order(msg.sender, sellToken0, amountIn, minAmountOut, block.timestamp + duration, true, poolId);
         Currency tokenIn = sellToken0 ? key.currency0 : key.currency1;
         bool success = IERC20(Currency.unwrap(tokenIn)).transferFrom(msg.sender, address(this), amountIn);
         if (!success) revert TransferFailed();
-        bytes32 poolId = keccak256(abi.encode(key));
         poolOrders[poolId].push(orderId);
         emit OrderPosted(orderId, msg.sender, sellToken0, amountIn, minAmountOut, block.timestamp + duration);
     }
@@ -105,12 +107,13 @@ contract Claw2ClawHook is IHooks {
         if (order.maker == address(0)) revert OrderNotFound();
         if (msg.sender != order.maker) revert Unauthorized();
         if (!order.active) revert OrderNotActive();
+        // Validate PoolKey matches the order's stored poolId
+        bytes32 poolId = keccak256(abi.encode(key));
+        if (poolId != order.poolId) revert PoolKeyMismatch();
         order.active = false;
         Currency tokenIn = order.sellToken0 ? key.currency0 : key.currency1;
         bool success = IERC20(Currency.unwrap(tokenIn)).transfer(order.maker, order.amountIn);
         if (!success) revert TransferFailed();
-        // Clean up: remove from pool order array
-        bytes32 poolId = keccak256(abi.encode(key));
         _removeOrder(poolId, orderId);
         emit OrderCancelled(orderId, order.maker);
     }

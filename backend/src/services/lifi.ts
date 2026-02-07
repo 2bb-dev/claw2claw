@@ -13,7 +13,8 @@ import {
     type ChainId as LiFiChainId,
     type QuoteRequest,
 } from '@lifi/sdk'
-import { encodeFunctionData, erc20Abi, type Hex } from 'viem'
+import crypto from 'crypto'
+import { encodeFunctionData, erc20Abi, zeroAddress, type Hex } from 'viem'
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { prisma } from '../db.js'
 import { decrypt } from '../lib/crypto.js'
@@ -173,10 +174,10 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
   console.log(`[executeLiFiSwap] TX target: ${txRequest.to}`)
   console.log(`[executeLiFiSwap] TX data length: ${txRequest.data?.length || 0}`)
 
-  // Create pending deal log
+  // Create pending deal log (use UUID to avoid timestamp collision under concurrent requests)
   const dealLog = await prisma.dealLog.create({
     data: {
-      txHash: `pending-${Date.now()}`,
+      txHash: `pending-${crypto.randomUUID()}`,
       regime: params.fromChain === params.toChain ? 'lifi-swap' : 'lifi-bridge',
       chainId: params.fromChain,
       fromToken: quote.action.fromToken.symbol,
@@ -189,8 +190,8 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
       metadata: {
         fromChain: params.fromChain,
         toChain: params.toChain,
-        fromTokenAddress: params.fromToken,
-        toTokenAddress: params.toToken,
+        fromTokenAddress: quote.action.fromToken.address,
+        toTokenAddress: quote.action.toToken.address,
         tool: quote.tool,
         estimatedTime: quote.estimate.executionDuration,
         sponsored: true,
@@ -200,7 +201,9 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
 
    try {
     // Step 1: Handle ERC20 approval if needed (non-native tokens)
-    const isNativeToken = params.fromToken === '0x0000000000000000000000000000000000000000'
+    // Use resolved token address from LI.FI quote, not raw params (which may be symbols)
+    const fromTokenAddress = quote.action.fromToken.address as Hex
+    const isNativeToken = fromTokenAddress === zeroAddress
     const approvalAddress = (quote.estimate as any).approvalAddress
     // Track whether the 7702 authorization has been used (it's only needed for the first tx)
     let authorizationConsumed = false
@@ -209,14 +212,14 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
       // Check current allowance
       const publicClient = createBlockchainClient(params.fromChain)
       const allowance = await publicClient.readContract({
-        address: params.fromToken as Hex,
+        address: fromTokenAddress,
         abi: erc20Abi,
         functionName: 'allowance',
         args: [account.address, approvalAddress as Hex],
       })
 
       if (allowance < BigInt(params.fromAmount)) {
-        console.log(`Approving ${params.fromToken} for ${approvalAddress} via sponsored tx...`)
+        console.log(`Approving ${fromTokenAddress} for ${approvalAddress} via sponsored tx...`)
         const approvalData = encodeFunctionData({
           abi: erc20Abi,
           functionName: 'approve',
@@ -224,7 +227,7 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
         })
 
         await smartClient.sendTransaction({
-          to: params.fromToken as Hex,
+          to: fromTokenAddress,
           data: approvalData,
           value: 0n,
           authorization: signedAuthorization as any,
@@ -249,12 +252,12 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
 
     console.log(`Swap tx hash: ${txHash}`)
 
-    // Update deal log with real txHash
+    // Update deal log with real txHash — keep status as 'pending' until confirmed
+    // Callers should poll GET /:txHash/status for final confirmation
     await prisma.dealLog.update({
       where: { id: dealLog.id },
       data: {
         txHash,
-        status: 'completed',
         toAmount: quote.estimate.toAmount,
       },
     })
@@ -262,7 +265,7 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
     return {
       txHash,
       dealLogId: dealLog.id,
-      status: 'completed',
+      status: 'pending',
       fromAmount: params.fromAmount,
       toAmount: quote.estimate.toAmount,
     }

@@ -49,14 +49,14 @@ export async function swapRoutes(fastify: FastifyInstance) {
       })
     }
 
-    if (!bot.encryptedWalletKey) {
+    if (!bot.wallet?.encryptedWalletKey) {
       return reply.status(400).send({
         error: 'Bot has no wallet. Register with createWallet: true first.',
       })
     }
 
     // EIP-7702: wallet address IS the EOA — single address for everything
-    const walletAddress = bot.walletAddress!
+    const walletAddress = bot.wallet.walletAddress
 
     try {
       const quote = await getLiFiQuote({
@@ -100,7 +100,7 @@ export async function swapRoutes(fastify: FastifyInstance) {
       })
     }
 
-    if (!bot.walletAddress || !bot.encryptedWalletKey) {
+    if (!bot.wallet?.walletAddress || !bot.wallet?.encryptedWalletKey) {
       return reply.status(400).send({
         error: 'Bot has no wallet configured. Register with createWallet: true first.',
       })
@@ -113,8 +113,8 @@ export async function swapRoutes(fastify: FastifyInstance) {
         fromToken,
         toToken,
         fromAmount,
-        encryptedPrivateKey: bot.encryptedWalletKey,
-        botAddress: bot.walletAddress,
+        encryptedPrivateKey: bot.wallet.encryptedWalletKey,
+        botAddress: bot.wallet.walletAddress,
         comment,
       })
 

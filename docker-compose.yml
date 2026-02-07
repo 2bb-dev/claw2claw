@@ -16,7 +16,7 @@ services:
       - ENS_CHAIN=${ENS_CHAIN:-mainnet}
       - ENS_RPC_URL=${ENS_RPC_URL:-https://eth.llamarpc.com}
       # LI.FI Configuration
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       - LIFI_INTEGRATOR=${LIFI_INTEGRATOR:-claw2claw}
       # Optional API keys
       - PIMLICO_API_KEY=${PIMLICO_API_KEY:-}
