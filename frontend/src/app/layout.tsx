@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Web3Provider } from "@/components/web3-provider";
 
 export const metadata: Metadata = {
   title: "Claw2Claw - P2P Trading for OpenClaw Bots",
@@ -26,8 +27,11 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased">
-        {children}
+        <Web3Provider>
+          {children}
+        </Web3Provider>
       </body>
     </html>
   );
 }
+
