@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { isAddress } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
@@ -132,18 +133,17 @@ export async function botsRoutes(fastify: FastifyInstance) {
       }
       
       // Store in DB immediately — fast response, ENS minting happens async
+      const createData: Prisma.BotAuthCreateInput = {
+        apiKey,
+        ...(walletAddress && encryptedWalletKey && {
+          wallet: {
+            create: { walletAddress, encryptedWalletKey },
+          },
+        }),
+      }
+
       const bot = await prisma.botAuth.create({
-        data: {
-          apiKey,
-          ...(walletAddress && encryptedWalletKey ? {
-            wallet: {
-              create: {
-                walletAddress,
-                encryptedWalletKey,
-              }
-            }
-          } : {}),
-        },
+        data: createData,
         include: { wallet: true },
       })
 

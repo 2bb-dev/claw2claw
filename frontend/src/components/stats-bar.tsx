@@ -5,32 +5,41 @@ import { useEffect, useState } from 'react'
 
 type ViewMode = 'all' | 'p2p'
 
-interface Deal {
-  regime?: string
-  total?: number
-  createdAt: string
-}
-
 interface Stats {
   totalTrades: number
   tradesPerHour: number
   lifiSwaps: number
   totalVolume: number
+  totalPnl?: number | null
 }
 
 interface StatsBarProps {
   viewMode: ViewMode
+  botAddress?: string | null
 }
 
-export function StatsBar({ viewMode }: StatsBarProps) {
-  const [allDeals, setAllDeals] = useState<Deal[]>([])
+export function StatsBar({ viewMode, botAddress }: StatsBarProps) {
+  const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchStats() {
       try {
-        const res = await api.get('/api/deals')
-        setAllDeals(res.data.deals || [])
+        const params = new URLSearchParams()
+        if (botAddress) params.set('botAddress', botAddress)
+
+        const res = await api.get(`/api/deals/stats?${params.toString()}`)
+        const s = res.data.stats
+
+        // Apply viewMode filter for display purposes
+        // (backend returns totals; p2p filter is client-side for now)
+        setStats({
+          totalTrades: s.totalTrades,
+          tradesPerHour: s.tradesPerHour,
+          lifiSwaps: s.lifiSwaps,
+          totalVolume: s.totalVolume,
+          totalPnl: s.totalPnl ?? null,
+        })
       } catch (error) {
         console.error('Failed to fetch stats:', error)
       } finally {
@@ -38,23 +47,13 @@ export function StatsBar({ viewMode }: StatsBarProps) {
       }
     }
 
+    setLoading(true)
     fetchStats()
     const interval = setInterval(fetchStats, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [botAddress])
 
-  const filteredDeals = viewMode === 'p2p'
-    ? allDeals.filter((d) => d.regime === 'p2p')
-    : allDeals
-
-  const stats: Stats | null = loading ? null : {
-    totalTrades: filteredDeals.length,
-    tradesPerHour: Math.round(filteredDeals.length / 24 * 10) / 10,
-    lifiSwaps: allDeals.filter((d) => d.regime?.startsWith('lifi')).length,
-    totalVolume: filteredDeals.reduce((acc, d) => acc + (d.total || 0), 0),
-  }
-
-  if (!stats) {
+  if (loading || !stats) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         {[...Array(4)].map((_, i) => (
@@ -66,6 +65,9 @@ export function StatsBar({ viewMode }: StatsBarProps) {
       </div>
     )
   }
+
+  const showPnl = botAddress && stats.totalPnl !== null && stats.totalPnl !== undefined
+  const pnlPositive = showPnl && stats.totalPnl! >= 0
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -110,16 +112,27 @@ export function StatsBar({ viewMode }: StatsBarProps) {
         </div>
       </div>
 
-      {/* Total Volume */}
+      {/* Total Volume → PNL when bot is selected */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
           </svg>
-          <span>TOTAL VOLUME</span>
+          <span>{showPnl ? 'PNL' : 'TOTAL VOLUME'}</span>
         </div>
         <div className="font-mono font-semibold text-lg text-foreground">
-          ${stats.totalVolume.toLocaleString()} <span className="text-muted-foreground text-sm">USDC</span>
+          {showPnl ? (
+            <>
+              <span className={pnlPositive ? 'text-green-500' : 'text-red-500'}>
+                {pnlPositive ? '+' : ''}{stats.totalPnl!.toLocaleString()}
+              </span>
+              <span className="text-muted-foreground text-sm ml-1">USD</span>
+            </>
+          ) : (
+            <>
+              ${stats.totalVolume.toLocaleString()} <span className="text-muted-foreground text-sm">USDC</span>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -1,15 +1,23 @@
 'use client'
 
+import { BotSearch } from '@/components/bot-search'
 import { DealsList } from '@/components/deals-list'
 import { Header } from '@/components/header'
 import { StatsBar } from '@/components/stats-bar'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 export type ViewMode = 'all' | 'p2p'
 
 export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>('all')
+  const [botAddress, setBotAddress] = useState<string | null>(null)
+  const [botLabel, setBotLabel] = useState<string | null>(null)
+
+  const handleBotResolved = useCallback((address: string | null, label: string | null) => {
+    setBotAddress(address)
+    setBotLabel(label)
+  }, [])
 
   return (
     <main className="min-h-screen bg-background">
@@ -21,6 +29,9 @@ export default function Home() {
           <h1 className="text-4xl font-bold text-foreground mb-3">Welcome to Claw2Claw</h1>
           <p className="text-muted-foreground text-lg">P2P trading platform for autonomous AI agents</p>
         </div>
+
+        {/* Bot Search Input */}
+        <BotSearch onBotResolved={handleBotResolved} />
         
         <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
           {/* For Humans Card */}
@@ -46,10 +57,10 @@ export default function Home() {
       {/* Main Content */}
       <div className="container mx-auto px-4 pb-8">
         {/* Stats Bar */}
-        <StatsBar viewMode={viewMode} />
+        <StatsBar viewMode={viewMode} botAddress={botAddress} />
 
         {/* Full-width Trades List */}
-        <DealsList viewMode={viewMode} />
+        <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
       </div>
 
       {/* Footer */}

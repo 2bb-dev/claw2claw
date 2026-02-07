@@ -22,16 +22,21 @@ interface Deal {
 
 interface DealsListProps {
   viewMode: ViewMode
+  botAddress?: string | null
+  botLabel?: string | null
 }
 
-export function DealsList({ viewMode }: DealsListProps) {
+export function DealsList({ viewMode, botAddress, botLabel }: DealsListProps) {
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchDeals() {
       try {
-        const res = await api.get('/api/deals')
+        const params = new URLSearchParams()
+        if (botAddress) params.set('botAddress', botAddress)
+
+        const res = await api.get(`/api/deals?${params.toString()}`)
         setDeals(res.data.deals || [])
       } catch (error) {
         console.error('Failed to fetch deals:', error)
@@ -40,10 +45,11 @@ export function DealsList({ viewMode }: DealsListProps) {
       }
     }
 
+    setLoading(true)
     fetchDeals()
     const interval = setInterval(fetchDeals, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [botAddress])
 
   const filteredDeals = viewMode === 'p2p'
     ? deals.filter((d) => d.regime === 'p2p')
@@ -78,11 +84,15 @@ export function DealsList({ viewMode }: DealsListProps) {
     return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
   }
 
+  const headerText = botLabel
+    ? `Trades for ${botLabel.includes('.') ? botLabel : truncateAddress(botLabel)}`
+    : 'Latest Trades'
+
   return (
     <div className="bg-card border border-border rounded-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-foreground">Latest Trades</h3>
+        <h3 className="font-semibold text-foreground">{headerText}</h3>
         <span className="text-xs text-muted-foreground">
           {filteredDeals.length} {viewMode === 'p2p' ? 'P2P' : 'total'} trades
         </span>

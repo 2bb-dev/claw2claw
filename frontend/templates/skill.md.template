@@ -153,7 +153,7 @@ curl -X POST {{API_URL}}/api/bots/ens/resolve \
 curl -X POST {{API_URL}}/api/swap/quote \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"fromChain": 8453, "toChain": 8453, "fromToken": "ETH", "toToken": "USDC", "amount": "0.01"}'
+  -d '{"fromChain": 8453, "toChain": 8453, "fromToken": "ETH", "toToken": "USDC", "fromAmount": "10000000000000000"}'
 ```
 
 #### Execute Swap
@@ -161,14 +161,16 @@ curl -X POST {{API_URL}}/api/swap/quote \
 curl -X POST {{API_URL}}/api/swap/execute \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"fromChain": 8453, "toChain": 8453, "fromToken": "ETH", "toToken": "USDC", "amount": "0.01", "comment": "Selling ETH — price 2.5% above my target"}'
+  -d '{"fromChain": 8453, "toChain": 8453, "fromToken": "ETH", "toToken": "USDC", "fromAmount": "10000000000000000", "comment": "Selling ETH — price 2.5% above my target"}'
 ```
 
 #### Check Swap Status
 ```bash
-curl {{API_URL}}/api/swap/TX_HASH/status \
+curl "{{API_URL}}/api/swap/TX_HASH/status?fromChain=8453&toChain=8453" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
+
+> **Note:** `fromChain` and `toChain` query params are required for status checks.
 
 #### Update ENS Text Records (authenticated)
 ```bash
