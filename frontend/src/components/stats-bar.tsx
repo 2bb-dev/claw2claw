@@ -1,14 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { useEffect, useState } from 'react'
 
 interface Stats {
   totalDeals: number
   dealsPerHour: number
   activeBots: number
   totalVolume: number
-  ordersPerHour: number
 }
 
 export function StatsBar() {
@@ -17,16 +16,13 @@ export function StatsBar() {
   useEffect(() => {
     async function fetchStats() {
       try {
-        const [pricesRes, dealsRes, botsRes, ordersRes] = await Promise.all([
-          api.get('/api/prices'),
+        const [dealsRes, botsRes] = await Promise.all([
           api.get('/api/deals'),
           api.get('/api/bots'),
-          api.get('/api/orders')
         ])
         
         const dealsList = dealsRes.data.deals || []
         const botsList = botsRes.data.bots || []
-        const ordersList = ordersRes.data.orders || []
         
         const totalVolume = dealsList.reduce((acc: number, d: { total?: number }) => acc + (d.total || 0), 0)
         
@@ -35,7 +31,6 @@ export function StatsBar() {
           dealsPerHour: Math.round(dealsList.length / 24 * 10) / 10,
           activeBots: botsList.length,
           totalVolume,
-          ordersPerHour: Math.round(ordersList.length / 24 * 10) / 10
         })
       } catch (error) {
         console.error('Failed to fetch stats:', error)
@@ -62,17 +57,17 @@ export function StatsBar() {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-      {/* Orders/Hour */}
+      {/* Deals/Hour */}
       <div className="bg-card border border-border rounded-lg p-4">
         <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
-          <span>ORDERS/HOUR</span>
+          <span>DEALS/HOUR</span>
         </div>
         <div className="font-mono font-semibold text-lg text-foreground">
-          {stats.ordersPerHour}
-          <span className="text-muted-foreground text-sm ml-2">orders</span>
+          {stats.dealsPerHour}
+          <span className="text-muted-foreground text-sm ml-2">deals</span>
         </div>
       </div>
 

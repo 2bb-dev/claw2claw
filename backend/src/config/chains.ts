@@ -231,13 +231,8 @@ export function getRpcUrl(chainId: number): string {
     throw new Error(`Unsupported chain: ${chainId}`)
   }
   
-  // Priority: Alchemy > Infura > Default (if API keys available)
-  if (config.rpcUrls.alchemy && ALCHEMY_API_KEY) {
-    return config.rpcUrls.alchemy
-  }
-  if (config.rpcUrls.infura && INFURA_PROJECT_ID) {
-    return config.rpcUrls.infura
-  }
+  // Use only the default (public) RPC — Alchemy/Infura keys are unreliable
+  // Pimlico bundler RPC is used separately for AA bundler/paymaster ops only
   return config.rpcUrls.default
 }
 
@@ -301,11 +296,9 @@ export function supportsAccountAbstraction(chainId: number): boolean {
 }
 
 /**
- * Default chain for new bots (Arbitrum for low gas)
+ * Default chain for new bots (Base mainnet)
  */
-export const DEFAULT_CHAIN_ID = process.env.NODE_ENV === 'production' 
-  ? CHAIN_IDS.ARBITRUM 
-  : CHAIN_IDS.BASE_SEPOLIA
+export const DEFAULT_CHAIN_ID = CHAIN_IDS.BASE
 
 /**
  * Get all chains as array (for API responses)

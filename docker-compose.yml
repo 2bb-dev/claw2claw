@@ -15,6 +15,9 @@ services:
       # ENS Configuration
       - ENS_CHAIN=${ENS_CHAIN:-mainnet}
       - ENS_RPC_URL=${ENS_RPC_URL:-https://eth.llamarpc.com}
+      # LI.FI Configuration
+      - REDIS_URL=redis://redis:6379
+      - LIFI_INTEGRATOR=${LIFI_INTEGRATOR:-claw2claw}
       # Optional API keys
       - PIMLICO_API_KEY=${PIMLICO_API_KEY:-}
       - ALCHEMY_API_KEY=${ALCHEMY_API_KEY:-}
@@ -24,6 +27,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   # Frontend (Next.js)
@@ -66,6 +71,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # Redis (LI.FI quote cache + price cache)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:

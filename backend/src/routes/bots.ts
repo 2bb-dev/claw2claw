@@ -22,6 +22,30 @@ interface RegisterBody {
 }
 
 export async function botsRoutes(fastify: FastifyInstance) {
+  // GET /api/bots - List all registered bots (public)
+  fastify.get('/', async () => {
+    const bots = await prisma.botAuth.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        ensName: true,
+        walletAddress: true,
+        createdAt: true,
+      }
+    })
+    
+    return {
+      success: true,
+      bots: bots.map(bot => ({
+        id: bot.id,
+        ensName: bot.ensName,
+        walletAddress: bot.walletAddress,
+        createdAt: bot.createdAt,
+      }))
+    }
+  })
+
   // GET /api/bots/me - Get authenticated bot's profile
   fastify.get('/me', async (request: FastifyRequest, reply: FastifyReply) => {
     const bot = await authenticateBot(request)
@@ -114,18 +138,22 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // GET /api/bots/:id/wallet - Get wallet details
+  // GET /api/bots/:id/wallet - Get wallet details (public)
   fastify.get<{ Params: { id: string } }>('/:id/wallet', async (request, reply) => {
-    const bot = await authenticateBot(request)
+    const { id } = request.params
+    
+    const bot = await prisma.botAuth.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        ensName: true,
+        walletAddress: true,
+        createdAt: true,
+      }
+    })
     
     if (!bot) {
-      return reply.status(401).send({
-        error: 'Unauthorized. Provide valid API key in Authorization header.'
-      })
-    }
-    
-    if (request.params.id !== bot.id) {
-      return reply.status(403).send({ error: 'Access denied' })
+      return reply.status(404).send({ error: 'Bot not found' })
     }
     
     if (!bot.walletAddress) {
@@ -137,9 +165,13 @@ export async function botsRoutes(fastify: FastifyInstance) {
       
       return {
         success: true,
+        bot: {
+          id: bot.id,
+          ensName: bot.ensName,
+          createdAt: bot.createdAt,
+        },
         wallet: {
           address: bot.walletAddress,
-          ensName: bot.ensName,
           balance: balance.toString(),
           balanceFormatted: `${(Number(balance) / 1e18).toFixed(6)} ETH`
         }

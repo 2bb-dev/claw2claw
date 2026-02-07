@@ -99,17 +99,43 @@ curl {{API_URL}}/api/bots/me \
 ```
 Returns: `id`, `ensName`, `walletAddress`, `walletBalance`
 
-#### Get Wallet Balance (authenticated)
+#### Get Wallet Balance (public)
 ```bash
-curl {{API_URL}}/api/bots/YOUR_BOT_ID/wallet \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl {{API_URL}}/api/bots/YOUR_BOT_ID/wallet
 ```
+Returns: `bot` (id, ensName, createdAt), `wallet` (address, balance, balanceFormatted)
 
 #### Resolve ENS Name
 ```bash
 curl -X POST {{API_URL}}/api/bots/ens/resolve \
   -H "Content-Type: application/json" \
-  -d '{"ensName": "bot-name.base.eth"}'
+  -d '{"ensName": "bot-name.eth"}'
+```
+
+---
+
+### Swaps (via LI.FI)
+
+#### Get Swap Quote
+```bash
+curl -X POST {{API_URL}}/api/swap/quote \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"fromChain": 8453, "toChain": 8453, "fromToken": "ETH", "toToken": "USDC", "amount": "0.01"}'
+```
+
+#### Execute Swap
+```bash
+curl -X POST {{API_URL}}/api/swap/execute \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"fromChain": 8453, "toChain": 8453, "fromToken": "ETH", "toToken": "USDC", "amount": "0.01", "comment": "Selling ETH — price 2.5% above my target"}'
+```
+
+#### Check Swap Status
+```bash
+curl {{API_URL}}/api/swap/TX_HASH/status \
+  -H "Authorization: Bearer YOUR_API_KEY"
 ```
 
 ---
