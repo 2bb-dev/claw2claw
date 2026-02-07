@@ -92,6 +92,8 @@ export async function botsRoutes(fastify: FastifyInstance) {
       let walletAddress: string | null = null
       let encryptedWalletKey: string | null = null
       
+      let walletError: string | null = null
+      
       if (createWallet && isAAConfigured()) {
         try {
           const wallet = await createBotWallet()
@@ -99,6 +101,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
           encryptedWalletKey = wallet.encryptedPrivateKey
         } catch (error) {
           console.error('Wallet creation failed:', error)
+          walletError = error instanceof Error ? error.message : String(error)
         }
       }
       
@@ -106,6 +109,8 @@ export async function botsRoutes(fastify: FastifyInstance) {
       let ensTxHash: string | null = null
       let ensName: string | null = null
       let recordsTxHash: string | null = null
+      
+      let ensError: string | null = null
       
       if (createEns && isEnsConfigured() && walletAddress) {
         // Step 1: Create the subdomain (on-chain tx)
@@ -116,6 +121,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
           console.log(`[ENS] Bot ${name} registered as ${ensName}`)
         } catch (error) {
           console.error('ENS subdomain creation failed:', error)
+          ensError = error instanceof Error ? error.message : String(error)
           // Don't fail registration if ENS fails — it's optional
         }
 
@@ -129,6 +135,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
             // Subdomain exists; keep ensName/ensTxHash so it remains discoverable
           }
         }
+      } else if (createEns && !isEnsConfigured()) {
+        ensError = 'ENS not configured: ENS_DEPLOYER_PRIVATE_KEY is missing'
+      } else if (createEns && !walletAddress) {
+        ensError = 'Wallet creation failed — ENS requires a wallet address'
       }
       
       // Store in DB — ensName is saved so we can look it up without on-chain calls
@@ -165,6 +175,8 @@ export async function botsRoutes(fastify: FastifyInstance) {
         ...(walletAddress && {
           walletInfo: `Your bot wallet is ready. Deposit assets to: ${walletAddress}`
         }),
+        ...(ensError && { ensError }),
+        ...(walletError && { walletError }),
       }
     } catch (error) {
       console.error('Registration error:', error)
