@@ -166,7 +166,7 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'ETH',
     blockExplorer: 'https://sepolia.etherscan.io',
     rpcUrls: {
-      default: 'https://rpc.sepolia.org',
+      default: 'https://ethereum-sepolia-rpc.publicnode.com',
       alchemy: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       infura: `https://sepolia.infura.io/v3/${INFURA_PROJECT_ID}`,
     },
