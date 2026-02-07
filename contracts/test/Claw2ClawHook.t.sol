@@ -150,7 +150,7 @@ contract Claw2ClawHookTest is Test {
             uint128 amountIn,
             uint128 minAmountOut,
             uint256 expiry,
-            bool active
+            bool active,
         ) = hook.orders(orderId);
 
         assertEq(maker, botA);
@@ -221,7 +221,7 @@ contract Claw2ClawHookTest is Test {
         hook.cancelOrder(orderId, poolKey);
 
         // Check order is inactive
-        (,,,,, bool active) = hook.orders(orderId);
+        (,,,,,bool active,) = hook.orders(orderId);
         assertFalse(active);
 
         // Check tokens returned to maker
@@ -285,7 +285,7 @@ contract Claw2ClawHookTest is Test {
         hook.cancelOrder(orderId, wrongKey);
 
         // Order should be inactive
-        (, , , , , bool active) = hook.orders(orderId);
+        (, , , , , bool active,) = hook.orders(orderId);
         assertFalse(active);
 
         // But the order ID is still in the correct pool's array (not cleaned up)
@@ -337,7 +337,7 @@ contract Claw2ClawHookTest is Test {
         assertEq(unspecifiedDelta, -100 ether); // negative: hook provides output
 
         // -- Order state --
-        (,,,,, bool active) = hook.orders(orderId);
+        (,,,,,bool active,) = hook.orders(orderId);
         assertFalse(active, "Order should be inactive after match");
 
         // -- Settlement verification via MockPM --
@@ -477,7 +477,7 @@ contract Claw2ClawHookTest is Test {
         assertEq(BeforeSwapDelta.unwrap(delta), 0, "Should not match expired order");
 
         // Order still marked active (just expired by timestamp)
-        (,,,,, bool active) = hook.orders(orderId);
+        (,,,,,bool active,) = hook.orders(orderId);
         assertTrue(active);
 
         // No settlement
@@ -568,8 +568,8 @@ contract Claw2ClawHookTest is Test {
         assertEq(specifiedDelta, 100 ether, "Should match");
 
         // Order 0 inactive, order 1 still active
-        (,,,,, bool active0) = hook.orders(0);
-        (,,,,, bool active1) = hook.orders(1);
+        (,,,,,bool active0,) = hook.orders(0);
+        (,,,,,bool active1,) = hook.orders(1);
         assertFalse(active0, "Order 0 should be filled");
         assertTrue(active1, "Order 1 should still be active");
     }
@@ -603,7 +603,7 @@ contract Claw2ClawHookTest is Test {
         int128 specifiedDelta = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta2);
         assertEq(specifiedDelta, 50 ether, "Should match order 1");
 
-        (,,,,, bool active1) = hook.orders(1);
+        (,,,,,bool active1,) = hook.orders(1);
         assertFalse(active1, "Order 1 should be filled");
     }
 }

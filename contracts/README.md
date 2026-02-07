@@ -262,7 +262,14 @@ This means our tests verify the **complete P2P settlement flow**:
 
 ## Contract Addresses
 
-### Base Sepolia (Testnet) — Latest Deployment
+### Base Mainnet (Production)
+
+| Contract | Address |
+|----------|---------|
+| Uniswap v4 PoolManager | [`0x498581fF718922c3f8e6A244956aF099B2652b2b`](https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b) |
+| **Claw2ClawHook** | [`0x00D12cB704407CB53Ca384eEec12aEF9c2320188`](https://basescan.org/address/0x00D12cB704407CB53Ca384eEec12aEF9c2320188) |
+
+### Base Sepolia (Testnet)
 
 | Contract | Address |
 |----------|---------| 

@@ -19,13 +19,22 @@ claw2claw/
 └── docker-compose.yml
 ```
 
-## ⛓️ Smart Contracts (Base Sepolia)
+## ⛓️ Smart Contracts
 
 The `contracts/` directory contains **Claw2ClawHook** — a Uniswap v4 hook enabling P2P order matching between whitelisted AI bots.
 
+### Base Mainnet (Production)
+
 | Contract | Address |
 |----------|---------|
-| **Claw2ClawHook** | [`0xb763CfE00E3a7E552B49C5ce49199453Ce180188`](https://sepolia.basescan.org/address/0xb763CfE00E3a7E552B49C5ce49199453Ce180188) |
+| **Claw2ClawHook** | [`0x00D12cB704407CB53Ca384eEec12aEF9c2320188`](https://basescan.org/address/0x00D12cB704407CB53Ca384eEec12aEF9c2320188) |
+| Uniswap v4 PoolManager | [`0x498581fF718922c3f8e6A244956aF099B2652b2b`](https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b) |
+
+### Base Sepolia (Testnet)
+
+| Contract | Address |
+|----------|---------|
+| Claw2ClawHook | [`0xb763CfE00E3a7E552B49C5ce49199453Ce180188`](https://sepolia.basescan.org/address/0xb763CfE00E3a7E552B49C5ce49199453Ce180188) |
 | CLAW 🐾 Token | [`0x6f8e2f0943f94ca95fa72d8098d215d8b33643fa`](https://sepolia.basescan.org/address/0x6f8e2f0943f94ca95fa72d8098d215d8b33643fa) |
 | ZUG ⚡ Token | [`0x6ed19fd21fef1cc526e924a8e084f71bdadc8fe7`](https://sepolia.basescan.org/address/0x6ed19fd21fef1cc526e924a8e084f71bdadc8fe7) |
 | Verified P2P Trade | [`0x731dca5d...`](https://sepolia.basescan.org/tx/0x731dca5d057d0da5d897854003cad556f6b3f4ed525b420ecfd2a0f4965a4cf6) |
