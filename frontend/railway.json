@@ -4,7 +4,9 @@
     "builder": "DOCKERFILE",
     "dockerfilePath": "frontend/Dockerfile",
     "watchPatterns": [
-      "frontend/**"
+      "frontend/**",
+      "package.json",
+      "package-lock.json"
     ]
   },
   "deploy": {
