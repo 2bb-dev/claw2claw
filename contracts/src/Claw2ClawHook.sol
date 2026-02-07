@@ -41,6 +41,10 @@ contract Claw2ClawHook is IHooks {
     error Unauthorized();
     error ExactInputOnly();
     error AmountOverflow();
+    error InvalidAmounts();
+    error InvalidDuration();
+    error TransferFailed();
+    error OnlyPoolManager();
 
     // State
     address public admin;
@@ -60,7 +64,7 @@ contract Claw2ClawHook is IHooks {
         _;
     }
     modifier onlyPoolManager() {
-        require(msg.sender == address(poolManager), "Only PoolManager");
+        if (msg.sender != address(poolManager)) revert OnlyPoolManager();
         _;
     }
     modifier onlyWhitelisted() {
@@ -77,13 +81,13 @@ contract Claw2ClawHook is IHooks {
     function postOrder(PoolKey calldata key, bool sellToken0, uint128 amountIn, uint128 minAmountOut, uint256 duration)
         external onlyWhitelisted returns (uint256 orderId)
     {
-        require(amountIn > 0 && minAmountOut > 0, "Invalid amounts");
-        require(duration > 0, "Invalid duration");
+        if (amountIn == 0 || minAmountOut == 0) revert InvalidAmounts();
+        if (duration == 0) revert InvalidDuration();
         orderId = nextOrderId++;
         orders[orderId] = Order(msg.sender, sellToken0, amountIn, minAmountOut, block.timestamp + duration, true);
         Currency tokenIn = sellToken0 ? key.currency0 : key.currency1;
         bool success = IERC20(Currency.unwrap(tokenIn)).transferFrom(msg.sender, address(this), amountIn);
-        require(success, "Transfer failed");
+        if (!success) revert TransferFailed();
         bytes32 poolId = keccak256(abi.encode(key));
         poolOrders[poolId].push(orderId);
         emit OrderPosted(orderId, msg.sender, sellToken0, amountIn, minAmountOut, block.timestamp + duration);
@@ -97,7 +101,10 @@ contract Claw2ClawHook is IHooks {
         order.active = false;
         Currency tokenIn = order.sellToken0 ? key.currency0 : key.currency1;
         bool success = IERC20(Currency.unwrap(tokenIn)).transfer(order.maker, order.amountIn);
-        require(success, "Transfer failed");
+        if (!success) revert TransferFailed();
+        // Clean up: remove from pool order array
+        bytes32 poolId = keccak256(abi.encode(key));
+        _removeOrder(poolId, orderId);
         emit OrderCancelled(orderId, order.maker);
     }
 
@@ -115,14 +122,15 @@ contract Claw2ClawHook is IHooks {
         if (params.amountSpecified >= 0) revert ExactInputOnly();
         // Safe cast: negate and check fits in uint128
         uint256 absAmount = uint256(-params.amountSpecified);
-        if (absAmount > type(uint128).max) revert AmountOverflow();
+        if (absAmount > uint256(uint128(type(int128).max))) revert AmountOverflow();
         uint128 takerAmountIn = uint128(absAmount);
 
         bytes32 poolId = keccak256(abi.encode(key));
         uint256[] storage orderIds = poolOrders[poolId];
 
         for (uint256 i = 0; i < orderIds.length; i++) {
-            Order storage order = orders[orderIds[i]];
+            uint256 matchedOrderId = orderIds[i];
+            Order storage order = orders[matchedOrderId];
             if (!order.active || block.timestamp > order.expiry) continue;
             if (order.sellToken0 == params.zeroForOne) continue;
             if (takerAmountIn < order.minAmountOut) continue;
@@ -140,14 +148,17 @@ contract Claw2ClawHook is IHooks {
             // 2. Settle maker's escrowed output TO PM (hook pays PM)
             poolManager.sync(outputCurrency);
             bool success = IERC20(Currency.unwrap(outputCurrency)).transfer(address(poolManager), order.amountIn);
-            require(success, "Transfer failed");
+            if (!success) revert TransferFailed();
             poolManager.settle();
 
             emit P2PTrade(
-                orderIds[i], order.maker, sender,
+                matchedOrderId, order.maker, sender,
                 Currency.unwrap(inputCurrency), Currency.unwrap(outputCurrency),
                 takerAmountIn, order.amountIn
             );
+
+            // 3. Clean up: remove filled order from pool array (swap-and-pop)
+            _removeOrder(poolId, matchedOrderId);
 
             // Return delta: cancel the swap entirely
             // specifiedDelta = -amountSpecified → amountToSwap becomes 0
@@ -163,6 +174,19 @@ contract Claw2ClawHook is IHooks {
         }
 
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    /// @dev Remove an orderId from the pool's order array via swap-and-pop.
+    ///      Prevents unbounded array growth that would DoS beforeSwap.
+    function _removeOrder(bytes32 poolId, uint256 orderId) internal {
+        uint256[] storage ids = poolOrders[poolId];
+        for (uint256 i = 0; i < ids.length; i++) {
+            if (ids[i] == orderId) {
+                ids[i] = ids[ids.length - 1];
+                ids.pop();
+                return;
+            }
+        }
     }
 
     /// @notice afterSwap — no-op

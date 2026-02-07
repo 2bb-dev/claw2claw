@@ -188,13 +188,13 @@ contract Claw2ClawHookTest is Test {
 
     function test_postOrder_revert_zeroAmount() public {
         vm.prank(botA);
-        vm.expectRevert("Invalid amounts");
+        vm.expectRevert(Claw2ClawHook.InvalidAmounts.selector);
         hook.postOrder(poolKey, true, 0, 90 ether, 3600);
     }
 
     function test_postOrder_revert_zeroDuration() public {
         vm.prank(botA);
-        vm.expectRevert("Invalid duration");
+        vm.expectRevert(Claw2ClawHook.InvalidDuration.selector);
         hook.postOrder(poolKey, true, 100 ether, 90 ether, 0);
     }
 
@@ -472,7 +472,7 @@ contract Claw2ClawHookTest is Test {
         });
 
         vm.prank(notBot);
-        vm.expectRevert("Only PoolManager");
+        vm.expectRevert(Claw2ClawHook.OnlyPoolManager.selector);
         hook.beforeSwap(botA, poolKey, params, "");
     }
 

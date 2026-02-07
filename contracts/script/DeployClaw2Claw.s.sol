@@ -161,7 +161,7 @@ contract DeployClaw2Claw is Script {
             poolKey,
             IPoolManager.SwapParams({
                 zeroForOne: true,
-                amountSpecified: -1000,
+                amountSpecified: -1000 ether,
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
             }),
             IPoolSwapTest.TestSettings({
