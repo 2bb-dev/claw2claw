@@ -2,23 +2,22 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
 import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
-
-/**
- * Generate an ENS subdomain for a bot
- */
-function generateBotEnsName(botName: string): string {
-  const sanitized = botName
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 32)
-  return `${sanitized}.eth`
-}
+import {
+  createBotSubdomain,
+  getBotProfile,
+  getDefaultBotRecords,
+  getTextRecord,
+  isEnsConfigured,
+  resolveEnsName,
+  reverseResolve,
+  setBotAddress,
+  setBotTextRecords,
+} from '../services/ens.js'
 
 interface RegisterBody {
   name: string
   createWallet?: boolean
+  createEns?: boolean  // Optional: create ENS subdomain for bot
 }
 
 export async function botsRoutes(fastify: FastifyInstance) {
@@ -42,14 +41,27 @@ export async function botsRoutes(fastify: FastifyInstance) {
         // Wallet balance fetch failed, continue without it
       }
     }
+
+    // Look up ENS profile on-chain
+    // We check the DB ensName first (fast), then verify on-chain if needed
+    let ensName: string | null = bot.ensName || null
+    let ensProfile = null
+    if (ensName) {
+      try {
+        ensProfile = await getBotProfile(ensName)
+      } catch {
+        // ENS lookup failed, continue without it
+      }
+    }
     
     return {
       success: true,
       bot: {
         id: bot.id,
-        ensName: bot.ensName,
+        ensName,
         walletAddress: bot.walletAddress,
         walletBalance,
+        ensProfile,
         createdAt: bot.createdAt,
       }
     }
@@ -58,7 +70,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
   // POST /api/bots/register - Register a new bot
   fastify.post<{ Body: RegisterBody }>('/register', async (request, reply) => {
     try {
-      const { name, createWallet = true } = request.body
+      const { name, createWallet = true, createEns = false } = request.body
       
       if (!name) {
         return reply.status(400).send({
@@ -82,10 +94,36 @@ export async function botsRoutes(fastify: FastifyInstance) {
         }
       }
       
-      // Generate ENS name
-      const ensName = generateBotEnsName(name)
+      // Create ENS subdomain if requested and configured
+      let ensTxHash: string | null = null
+      let ensName: string | null = null
       
-      // Store auth backup in DB
+      if (createEns && isEnsConfigured()) {
+        try {
+          const botWalletAddress = walletAddress || '0x0000000000000000000000000000000000000000'
+          const result = await createBotSubdomain(name, botWalletAddress)
+          ensName = result.ensName
+          ensTxHash = result.txHash
+
+          // Set default DeFi text records (deployer owns subname, so this works)
+          const defaultRecords = getDefaultBotRecords(name)
+          await setBotTextRecords(ensName, defaultRecords)
+
+          // Set the ETH address record so name resolves to bot wallet
+          if (walletAddress) {
+            await setBotAddress(ensName, walletAddress)
+          }
+
+          console.log(`[ENS] Bot ${name} registered as ${ensName}`)
+        } catch (error) {
+          console.error('ENS subdomain creation failed:', error)
+          // Don't fail registration if ENS fails — it's optional
+          ensName = null
+        }
+      }
+      
+      // Store in DB — ensName is saved so we can look it up without on-chain calls
+      // The on-chain state is the source of truth; DB is a fast cache.
       const bot = await prisma.botAuth.create({
         data: {
           apiKey,
@@ -100,9 +138,17 @@ export async function botsRoutes(fastify: FastifyInstance) {
         bot: {
           id: bot.id,
           apiKey: bot.apiKey,
-          ensName: bot.ensName,
+          ensName: bot.ensName || null,
           wallet: bot.walletAddress,
         },
+        ...(ensTxHash && ensName && {
+          ens: {
+            name: ensName,
+            txHash: ensTxHash,
+            records: getDefaultBotRecords(name),
+            explorer: `https://sepolia.app.ens.domains/${ensName}`,
+          }
+        }),
         important: "SAVE YOUR API KEY! You need it for all requests.",
         ...(walletAddress && {
           walletInfo: `Your bot wallet is ready. Deposit assets to: ${walletAddress}`
@@ -139,7 +185,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
         success: true,
         wallet: {
           address: bot.walletAddress,
-          ensName: bot.ensName,
+          ensName: bot.ensName || null,
           balance: balance.toString(),
           balanceFormatted: `${(Number(balance) / 1e18).toFixed(6)} ETH`
         }
@@ -150,7 +196,11 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // POST /api/ens/resolve - Resolve ENS name to address
+  // ================================================================
+  // ENS Endpoints — Direct ENS-specific code (for prize qualification)
+  // ================================================================
+
+  // POST /api/bots/ens/resolve - Resolve ENS name to address
   fastify.post<{ Body: { ensName: string } }>('/ens/resolve', async (request, reply) => {
     const { ensName } = request.body
     
@@ -158,7 +208,145 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'ensName is required' })
     }
     
-    // TODO: implement ENS resolution
-    return reply.status(501).send({ error: 'ENS resolution not yet implemented' })
+    try {
+      const address = await resolveEnsName(ensName)
+      
+      if (!address) {
+        return reply.status(404).send({ error: `Could not resolve ${ensName}` })
+      }
+
+      return {
+        success: true,
+        ensName,
+        address,
+      }
+    } catch (error) {
+      console.error('ENS resolution error:', error)
+      return reply.status(500).send({ error: 'ENS resolution failed' })
+    }
+  })
+
+  // POST /api/bots/ens/reverse - Reverse-resolve address to ENS name
+  fastify.post<{ Body: { address: string } }>('/ens/reverse', async (request, reply) => {
+    const { address } = request.body
+
+    if (!address) {
+      return reply.status(400).send({ error: 'address is required' })
+    }
+
+    try {
+      const name = await reverseResolve(address)
+
+      return {
+        success: true,
+        address,
+        ensName: name || null,
+      }
+    } catch (error) {
+      console.error('ENS reverse resolution error:', error)
+      return reply.status(500).send({ error: 'Reverse resolution failed' })
+    }
+  })
+
+  // GET /api/bots/ens/profile/:name - Get bot's full ENS profile
+  fastify.get<{ Params: { name: string } }>('/ens/profile/:name', async (request, reply) => {
+    const { name } = request.params
+    
+    try {
+      const profile = await getBotProfile(name)
+
+      return {
+        success: true,
+        profile,
+      }
+    } catch (error) {
+      console.error('ENS profile error:', error)
+      return reply.status(500).send({ error: 'Failed to fetch ENS profile' })
+    }
+  })
+
+  // GET /api/bots/ens/record/:name/:key - Read a single text record
+  fastify.get<{ Params: { name: string; key: string } }>('/ens/record/:name/:key', async (request, reply) => {
+    const { name, key } = request.params
+
+    try {
+      const value = await getTextRecord(name, key)
+
+      return {
+        success: true,
+        ensName: name,
+        key,
+        value,
+      }
+    } catch (error) {
+      console.error('ENS text record error:', error)
+      return reply.status(500).send({ error: 'Failed to read text record' })
+    }
+  })
+
+  // POST /api/bots/ens/records - Update text records (authenticated)
+  fastify.post<{ Body: { records: Record<string, string> } }>('/ens/records', async (request, reply) => {
+    const bot = await authenticateBot(request)
+
+    if (!bot) {
+      return reply.status(401).send({ error: 'Unauthorized' })
+    }
+
+    if (!isEnsConfigured()) {
+      return reply.status(503).send({ error: 'ENS not configured on this server' })
+    }
+
+    const { records } = request.body
+    if (!records || Object.keys(records).length === 0) {
+      return reply.status(400).send({ error: 'records object is required' })
+    }
+
+    // Only allow claw2claw-namespaced records + standard records
+    const allowedPrefixes = ['com.claw2claw.', 'description', 'avatar', 'url']
+    const invalidKeys = Object.keys(records).filter(
+      key => !allowedPrefixes.some(prefix => key.startsWith(prefix))
+    )
+    if (invalidKeys.length > 0) {
+      return reply.status(400).send({
+        error: `Invalid record keys: ${invalidKeys.join(', ')}. Use com.claw2claw.* prefix.`
+      })
+    }
+
+    // Get ENS name from DB (cached from registration)
+    const ensName = bot.ensName
+    if (!ensName) {
+      return reply.status(400).send({ error: 'Bot does not have an ENS name. Register with createEns: true.' })
+    }
+
+    try {
+      const txHash = await setBotTextRecords(ensName, records)
+
+      return {
+        success: true,
+        ensName,
+        records,
+        txHash,
+        explorer: `https://sepolia.etherscan.io/tx/${txHash}`,
+      }
+    } catch (error) {
+      console.error('ENS record update error:', error)
+      return reply.status(500).send({ error: 'Failed to update text records' })
+    }
+  })
+
+  // GET /api/bots/ens/status - Check ENS configuration status
+  fastify.get('/ens/status', async () => {
+    return {
+      success: true,
+      ens: {
+        configured: isEnsConfigured(),
+        parentName: process.env.ENS_PARENT_NAME || 'claw2claw.eth',
+        network: 'sepolia',
+        contracts: {
+          nameWrapper: '0xab50971078225D365994dc1Edcb9b7FD72Bb4862',
+          publicResolver: '0x9010A27463717360cAD99CEA8bD39b8705CCA238',
+        }
+      }
+    }
   })
 }
