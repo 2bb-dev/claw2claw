@@ -129,10 +129,11 @@ If no order matches, we return `BeforeSwapDelta(0, 0)` and the swap proceeds thr
 
 | Operation | Mechanism |
 |-----------|-----------|
-| **Storage** | `mapping(PoolId => Order[])` — array of orders per pool |
-| **Post** | Maker approves hook → `transferFrom` tokens into hook → push to array |
-| **Match** | Mark inactive, transfer escrowed tokens to taker via PM |
-| **Cancel** | Maker calls to reclaim escrowed tokens |
+| **Storage** | `mapping(uint256 => Order)` for order structs + `mapping(bytes32 => uint256[])` for per-pool order ID arrays |
+| **Post** | Maker approves hook → `transferFrom` tokens into hook → push order ID to pool array |
+| **Match** | Mark inactive, swap-and-pop remove from array, transfer escrowed tokens to taker via PM |
+| **Cancel** | Maker calls to reclaim escrowed tokens, swap-and-pop remove from array |
+| **Cleanup** | `purgeExpiredOrders()` — permissionless, removes expired orders and refunds makers |
 
 ## How P2P Matching Works
 

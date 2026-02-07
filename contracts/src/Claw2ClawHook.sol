@@ -28,9 +28,11 @@ contract Claw2ClawHook is IHooks {
     // Events
     event OrderPosted(uint256 indexed orderId, address indexed maker, bool sellToken0, uint128 amountIn, uint128 minAmountOut, uint256 expiry);
     event OrderCancelled(uint256 indexed orderId, address indexed maker);
+    event OrderExpired(uint256 indexed orderId, address indexed maker);
     event P2PTrade(uint256 indexed orderId, address indexed maker, address indexed taker, address tokenIn, address tokenOut, uint128 amountIn, uint128 amountOut);
     event BotAdded(address indexed bot);
     event BotRemoved(address indexed bot);
+    event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
 
     // Errors
     error NotAdmin();
@@ -45,6 +47,7 @@ contract Claw2ClawHook is IHooks {
     error InvalidDuration();
     error TransferFailed();
     error OnlyPoolManager();
+    error ZeroAddress();
 
     // State
     address public admin;
@@ -75,7 +78,11 @@ contract Claw2ClawHook is IHooks {
     // Admin
     function addBot(address bot) external onlyAdmin { allowedBots[bot] = true; emit BotAdded(bot); }
     function removeBot(address bot) external onlyAdmin { allowedBots[bot] = false; emit BotRemoved(bot); }
-    function setAdmin(address newAdmin) external onlyAdmin { admin = newAdmin; }
+    function setAdmin(address newAdmin) external onlyAdmin {
+        if (newAdmin == address(0)) revert ZeroAddress();
+        emit AdminChanged(admin, newAdmin);
+        admin = newAdmin;
+    }
 
     // Order Book
     function postOrder(PoolKey calldata key, bool sellToken0, uint128 amountIn, uint128 minAmountOut, uint256 duration)
@@ -188,6 +195,33 @@ contract Claw2ClawHook is IHooks {
                 ids[i] = ids[ids.length - 1];
                 ids.pop();
                 return;
+            }
+        }
+    }
+
+    /// @notice Permissionless cleanup: remove expired orders, refund escrowed tokens.
+    /// @dev Anyone can call this to keep the pool's order array bounded.
+    ///      The caller pays gas, creating a natural incentive for housekeeping.
+    function purgeExpiredOrders(PoolKey calldata key) external {
+        bytes32 poolId = keccak256(abi.encode(key));
+        uint256[] storage ids = poolOrders[poolId];
+        uint256 i = 0;
+        while (i < ids.length) {
+            Order storage order = orders[ids[i]];
+            if (order.active && block.timestamp > order.expiry) {
+                uint256 expiredId = ids[i];
+                order.active = false;
+                // Refund escrowed tokens to maker
+                Currency tokenIn = order.sellToken0 ? key.currency0 : key.currency1;
+                bool success = IERC20(Currency.unwrap(tokenIn)).transfer(order.maker, order.amountIn);
+                if (!success) revert TransferFailed();
+                // Swap-and-pop removal
+                ids[i] = ids[ids.length - 1];
+                ids.pop();
+                emit OrderExpired(expiredId, order.maker);
+                // Don't increment i — swapped element needs checking
+            } else {
+                i++;
             }
         }
     }
