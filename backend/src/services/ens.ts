@@ -177,15 +177,21 @@ export function isEnsConfigured(): boolean {
 }
 
 /**
- * Sanitize a bot name into a valid ENS label
+ * Sanitize a bot name into a valid ENS label.
+ * Throws if the result is empty (e.g., input is only symbols).
  */
 export function sanitizeBotLabel(botName: string): string {
-  return botName
+  const label = botName
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .slice(0, 32)
+
+  if (!label) {
+    throw new Error(`Invalid bot name '${botName}': produces empty ENS label`)
+  }
+  return label
 }
 
 /**
@@ -221,11 +227,24 @@ export async function createBotSubdomain(
   const fullName = `${label}.${ENS_PARENT_NAME}`
   const parentNode = namehash(ENS_PARENT_NAME)
   
+  // Verify parent name is wrapped in NameWrapper (required for setSubnodeRecord)
+  const isWrapped = await publicClient.readContract({
+    address: ENS_CONTRACTS.nameWrapper,
+    abi: nameWrapperAbi,
+    functionName: 'isWrapped',
+    args: [parentNode],
+  })
+  if (!isWrapped) {
+    throw new Error(
+      `Parent name '${ENS_PARENT_NAME}' is not wrapped in NameWrapper. ` +
+      `Please wrap it first at https://app.ens.domains`
+    )
+  }
+
   // Set expiry far in the future (10 years from now)
   const expiry = BigInt(Math.floor(Date.now() / 1000) + 10 * 365 * 24 * 60 * 60)
 
   // Deployer stays owner of the subname so it can set/update text records.
-  // The bot's wallet address is set via setAddr() separately.
   const txHash = await walletClient.writeContract({
     address: ENS_CONTRACTS.nameWrapper,
     abi: nameWrapperAbi,
@@ -244,7 +263,10 @@ export async function createBotSubdomain(
   // Wait for transaction confirmation
   await publicClient.waitForTransactionReceipt({ hash: txHash })
 
-  console.log(`[ENS] Created subdomain: ${fullName} (owner: deployer, tx: ${txHash})`)
+  // Set the bot's wallet address as the addr record for the subdomain
+  await setBotAddress(fullName, botWalletAddress)
+
+  console.log(`[ENS] Created subdomain: ${fullName} (addr: ${botWalletAddress}, tx: ${txHash})`)
   return { ensName: fullName, txHash }
 }
 
@@ -340,12 +362,24 @@ export async function resolveEnsName(name: string): Promise<string | null> {
 }
 
 /**
- * Check if bot subdomain exists on-chain by checking if it resolves
+ * Check if bot subdomain exists on-chain via NameWrapper ownership.
+ * This is more reliable than resolution since a subdomain can exist
+ * without an addr record set.
  */
 export async function checkSubdomainExists(botName: string): Promise<boolean> {
-  const ensName = getBotEnsName(botName)
-  const address = await resolveEnsName(ensName)
-  return address !== null
+  try {
+    const ensName = getBotEnsName(botName)
+    const node = namehash(ensName)
+    const owner = await publicClient.readContract({
+      address: ENS_CONTRACTS.nameWrapper,
+      abi: nameWrapperAbi,
+      functionName: 'ownerOf',
+      args: [BigInt(node)],
+    })
+    return owner !== '0x0000000000000000000000000000000000000000'
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -432,12 +466,27 @@ export async function getBotProfile(botName: string): Promise<{
  * Default DeFi text records for a new bot
  */
 export function getDefaultBotRecords(botName: string): Record<string, string> {
+  const label = sanitizeBotLabel(botName)
   return {
-    'description': `Autonomous P2P trading bot on Claw2Claw`,
+    'description': `${label} — autonomous P2P trading bot on Claw2Claw`,
     'com.claw2claw.strategy': 'default',
     'com.claw2claw.risk': 'medium',
     'com.claw2claw.pairs': 'CLAW/ZUG',
     'com.claw2claw.maxOrder': '1000',
     'com.claw2claw.active': 'true',
+  }
+}
+
+/**
+ * Export ENS config for use in /ens/status endpoint
+ */
+export function getEnsConfig() {
+  return {
+    network: IS_MAINNET ? 'mainnet' : 'sepolia',
+    parentName: ENS_PARENT_NAME,
+    contracts: {
+      nameWrapper: ENS_CONTRACTS.nameWrapper,
+      publicResolver: ENS_CONTRACTS.publicResolver,
+    },
   }
 }

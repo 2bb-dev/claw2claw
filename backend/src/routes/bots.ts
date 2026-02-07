@@ -6,6 +6,7 @@ import {
   createBotSubdomain,
   getBotProfile,
   getDefaultBotRecords,
+  getEnsConfig,
   getTextRecord,
   isEnsConfigured,
   resolveEnsName,
@@ -13,6 +14,7 @@ import {
   setBotAddress,
   setBotTextRecords,
 } from '../services/ens.js'
+import { isAddress } from 'viem'
 
 interface RegisterBody {
   name: string
@@ -234,6 +236,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'address is required' })
     }
 
+    if (!isAddress(address)) {
+      return reply.status(400).send({ error: 'Invalid Ethereum address' })
+    }
+
     try {
       const name = await reverseResolve(address)
 
@@ -301,14 +307,14 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'records object is required' })
     }
 
-    // Only allow claw2claw-namespaced records + standard records
-    const allowedPrefixes = ['com.claw2claw.', 'description', 'avatar', 'url']
+    // Only allow exact standard keys + claw2claw namespace
+    const ALLOWED_STANDARD_KEYS = new Set(['description', 'avatar', 'url'])
     const invalidKeys = Object.keys(records).filter(
-      key => !allowedPrefixes.some(prefix => key.startsWith(prefix))
+      key => !ALLOWED_STANDARD_KEYS.has(key) && !key.startsWith('com.claw2claw.')
     )
     if (invalidKeys.length > 0) {
       return reply.status(400).send({
-        error: `Invalid record keys: ${invalidKeys.join(', ')}. Use com.claw2claw.* prefix.`
+        error: `Invalid record keys: ${invalidKeys.join(', ')}. Use com.claw2claw.* prefix or standard keys (description, avatar, url).`
       })
     }
 
@@ -336,16 +342,14 @@ export async function botsRoutes(fastify: FastifyInstance) {
 
   // GET /api/bots/ens/status - Check ENS configuration status
   fastify.get('/ens/status', async () => {
+    const config = getEnsConfig()
     return {
       success: true,
       ens: {
         configured: isEnsConfigured(),
-        parentName: process.env.ENS_PARENT_NAME || 'claw2claw.eth',
-        network: 'sepolia',
-        contracts: {
-          nameWrapper: '0xab50971078225D365994dc1Edcb9b7FD72Bb4862',
-          publicResolver: '0x9010A27463717360cAD99CEA8bD39b8705CCA238',
-        }
+        parentName: config.parentName,
+        network: config.network,
+        contracts: config.contracts,
       }
     }
   })

@@ -25,6 +25,19 @@ export const ENS_RECORD_KEYS = {
   URL: 'url',
 } as const
 
+/**
+ * Safe wrapper around normalize() — returns undefined if the name is
+ * invalid, so hooks can disable the query instead of crashing during render.
+ */
+function safeNormalize(name: string | undefined): string | undefined {
+  if (!name) return undefined
+  try {
+    return normalize(name)
+  } catch {
+    return undefined
+  }
+}
+
 // ============================================================
 // Core ENS Hooks (wagmi)
 // ============================================================
@@ -46,10 +59,11 @@ export function useEnsNameForAddress(address: `0x${string}` | undefined) {
  * Example: "clawbot.claw2claw.eth" → 0x1234...
  */
 export function useEnsAddressForName(name: string | undefined) {
+  const normalized = safeNormalize(name)
   return useEnsAddress({
-    name: name ? normalize(name) : undefined,
+    name: normalized,
     chainId: ensChainId,
-    query: { enabled: !!name },
+    query: { enabled: !!normalized },
   })
 }
 
@@ -57,10 +71,11 @@ export function useEnsAddressForName(name: string | undefined) {
  * Get the avatar for an ENS name
  */
 export function useEnsAvatarForName(name: string | undefined) {
+  const normalized = safeNormalize(name)
   return useEnsAvatar({
-    name: name ? normalize(name) : undefined,
+    name: normalized,
     chainId: ensChainId,
-    query: { enabled: !!name },
+    query: { enabled: !!normalized },
   })
 }
 
@@ -72,11 +87,12 @@ export function useEnsAvatarForName(name: string | undefined) {
  * Read a single ENS text record
  */
 export function useEnsRecord(name: string | undefined, key: string) {
+  const normalized = safeNormalize(name)
   return useEnsText({
-    name: name ? normalize(name) : undefined,
+    name: normalized,
     key,
     chainId: ensChainId,
-    query: { enabled: !!name },
+    query: { enabled: !!normalized },
   })
 }
 
