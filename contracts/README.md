@@ -267,24 +267,16 @@ This means our tests verify the **complete P2P settlement flow**:
 | Contract | Address |
 |----------|---------|
 | Uniswap v4 PoolManager | [`0x498581fF718922c3f8e6A244956aF099B2652b2b`](https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b) |
-| **Claw2ClawHook** | [`0x00D12cB704407CB53Ca384eEec12aEF9c2320188`](https://basescan.org/address/0x00D12cB704407CB53Ca384eEec12aEF9c2320188) |
+| **Claw2ClawHook** | [`0xcCFAf7E2c4C46064aF5Df6dB6a22A377a2d10188`](https://basescan.org/address/0xcCFAf7E2c4C46064aF5Df6dB6a22A377a2d10188) |
+| SimpleSwapRouter | [`0x02cb315Aa9189604204FfaA61A7fB5C05Fd0cA2a`](https://basescan.org/address/0x02cb315Aa9189604204FfaA61A7fB5C05Fd0cA2a) |
 
-### Base Sepolia (Testnet)
+#### Verified Mainnet P2P Trade (USDC ↔ WETH)
 
-| Contract | Address |
-|----------|---------| 
-| PoolManager (v4) | [`0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408`](https://sepolia.basescan.org/address/0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408) |
-| PoolSwapTest | [`0x8B5bcC363ddE2614281aD875bad385E0A785D3B9`](https://sepolia.basescan.org/address/0x8B5bcC363ddE2614281aD875bad385E0A785D3B9) |
-| PoolModifyLiquidityTest | [`0x37429cD17Cb1454C34E7F50b09725202Fd533039`](https://sepolia.basescan.org/address/0x37429cD17Cb1454C34E7F50b09725202Fd533039) |
-| **Claw2ClawHook** | [`0xb763CfE00E3a7E552B49C5ce49199453Ce180188`](https://sepolia.basescan.org/address/0xb763CfE00E3a7E552B49C5ce49199453Ce180188) |
-| **ZUG ⚡** (token0) | [`0x6ed19fd21fef1cc526e924a8e084f71bdadc8fe7`](https://sepolia.basescan.org/address/0x6ed19fd21fef1cc526e924a8e084f71bdadc8fe7) |
-| **CLAW 🐾** (token1) | [`0x6f8e2f0943f94ca95fa72d8098d215d8b33643fa`](https://sepolia.basescan.org/address/0x6f8e2f0943f94ca95fa72d8098d215d8b33643fa) |
-
-### Verified P2P Trade
-
-| Description | Link |
-|-------------|------|
-| Successful P2P swap (Bot A ↔ Bot B) | [`0x731dca5d...`](https://sepolia.basescan.org/tx/0x731dca5d057d0da5d897854003cad556f6b3f4ed525b420ecfd2a0f4965a4cf6) |
+| Step | Transaction |
+|------|-------------|
+| Pool initialized (WETH/USDC with hook) | [`0xf5b7840f...`](https://basescan.org/tx/0xf5b7840fe19e4b5c81581fee45d25d0fb561c23750806ba5d20694ff365210a2) |
+| Bot A posted order (sell 5 USDC for ≥0.001 WETH) | [`0x0b11d92d...`](https://basescan.org/tx/0x0b11d92da0385b424d599eea41bc6d38f1830ec617d79817a01bcaf649c5afe8) |
+| **Bot B P2P swap (matched!)** | [`0x1dc3ae3a...`](https://basescan.org/tx/0x1dc3ae3a57996c922bfd097595dbeeb2245518cf4cf3c17b6d89ac69667d0739) |
 
 ## Usage Example
 

@@ -173,11 +173,13 @@ contract Claw2ClawHook is IHooks {
             _removeOrder(poolId, matchedOrderId);
 
             // Return delta: cancel the swap entirely
-            // specifiedDelta = -amountSpecified → amountToSwap becomes 0
-            // unspecifiedDelta = +amountSpecified → hook handled the output
-            // Safe: we already validated amountSpecified fits in int128 via uint128 check
+            // specifiedDelta: cancel the taker's input so the AMM doesn't process it
+            //   For exact-input (amountSpecified < 0), specifiedDelta = -amountSpecified → cancels input
+            // unspecifiedDelta: report the actual output amount the hook settled (order.amountIn)
+            //   This MUST be -order.amountIn (negative = hook is providing output tokens)
+            //   Using amountSpecified here is WRONG when input/output tokens have different decimals
             int128 specified = int128(-params.amountSpecified);
-            int128 unspecified = int128(params.amountSpecified);
+            int128 unspecified = -int128(uint128(order.amountIn));
             return (
                 IHooks.beforeSwap.selector,
                 toBeforeSwapDelta(specified, unspecified),
