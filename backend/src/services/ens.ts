@@ -6,7 +6,7 @@
  * 
  * Set ENS_MAINNET=true for mainnet, false/unset for Sepolia testnet.
  */
-import { createPublicClient, createWalletClient, http, namehash, type Hex, encodeFunctionData } from 'viem'
+import { createPublicClient, createWalletClient, http, namehash, type Hex, encodeFunctionData, keccak256, toBytes } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize } from 'viem/ens'
 import { sepolia, mainnet } from 'viem/chains'
@@ -37,100 +37,120 @@ const ENS_CONTRACTS = IS_MAINNET
 const ENS_PARENT_NAME = normalize(process.env.ENS_PARENT_NAME || 'claw2claw.eth')
 
 // ============================================================
-// ABI fragments (only the functions we need)
+// ABI fragments — sourced from ENS GitHub deployment JSON
+// https://github.com/ensdomains/ens-contracts/tree/staging/deployments/sepolia
 // ============================================================
 
 const nameWrapperAbi = [
+  // setSubnodeRecord(bytes32 parentNode, string label, address owner, address resolver, uint64 ttl, uint32 fuses, uint64 expiry)
   {
+    inputs: [
+      { internalType: 'bytes32', name: 'parentNode', type: 'bytes32' },
+      { internalType: 'string', name: 'label', type: 'string' },
+      { internalType: 'address', name: 'owner', type: 'address' },
+      { internalType: 'address', name: 'resolver', type: 'address' },
+      { internalType: 'uint64', name: 'ttl', type: 'uint64' },
+      { internalType: 'uint32', name: 'fuses', type: 'uint32' },
+      { internalType: 'uint64', name: 'expiry', type: 'uint64' },
+    ],
     name: 'setSubnodeRecord',
-    type: 'function',
+    outputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
     stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'parentNode', type: 'bytes32' },
-      { name: 'label', type: 'string' },
-      { name: 'owner', type: 'address' },
-      { name: 'resolver', type: 'address' },
-      { name: 'ttl', type: 'uint64' },
-      { name: 'fuses', type: 'uint32' },
-      { name: 'expiry', type: 'uint64' },
-    ],
-    outputs: [{ type: 'bytes32' }],
+    type: 'function',
   },
+  // setSubnodeOwner(bytes32 parentNode, string label, address owner, uint32 fuses, uint64 expiry)
   {
+    inputs: [
+      { internalType: 'bytes32', name: 'parentNode', type: 'bytes32' },
+      { internalType: 'string', name: 'label', type: 'string' },
+      { internalType: 'address', name: 'owner', type: 'address' },
+      { internalType: 'uint32', name: 'fuses', type: 'uint32' },
+      { internalType: 'uint64', name: 'expiry', type: 'uint64' },
+    ],
     name: 'setSubnodeOwner',
-    type: 'function',
+    outputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
     stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'parentNode', type: 'bytes32' },
-      { name: 'label', type: 'string' },
-      { name: 'owner', type: 'address' },
-      { name: 'fuses', type: 'uint32' },
-      { name: 'expiry', type: 'uint64' },
-    ],
-    outputs: [{ type: 'bytes32' }],
+    type: 'function',
   },
+  // ownerOf(uint256 id) → address
   {
+    inputs: [{ internalType: 'uint256', name: 'id', type: 'uint256' }],
     name: 'ownerOf',
-    type: 'function',
+    outputs: [{ internalType: 'address', name: 'owner', type: 'address' }],
     stateMutability: 'view',
-    inputs: [{ name: 'id', type: 'uint256' }],
-    outputs: [{ type: 'address' }],
+    type: 'function',
   },
+  // isWrapped(bytes32 node) → bool  (single-arg overload)
   {
+    inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
     name: 'isWrapped',
-    type: 'function',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
     stateMutability: 'view',
-    inputs: [{ name: 'node', type: 'bytes32' }],
-    outputs: [{ type: 'bool' }],
+    type: 'function',
+  },
+  // isWrapped(bytes32 parentNode, bytes32 labelhash) → bool  (two-arg overload)
+  {
+    inputs: [
+      { internalType: 'bytes32', name: 'parentNode', type: 'bytes32' },
+      { internalType: 'bytes32', name: 'labelhash', type: 'bytes32' },
+    ],
+    name: 'isWrapped',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
   },
 ] as const
 
 const publicResolverAbi = [
+  // setText(bytes32 node, string key, string value)
   {
+    inputs: [
+      { internalType: 'bytes32', name: 'node', type: 'bytes32' },
+      { internalType: 'string', name: 'key', type: 'string' },
+      { internalType: 'string', name: 'value', type: 'string' },
+    ],
     name: 'setText',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'node', type: 'bytes32' },
-      { name: 'key', type: 'string' },
-      { name: 'value', type: 'string' },
-    ],
     outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
   },
+  // text(bytes32 node, string key) → string
   {
+    inputs: [
+      { internalType: 'bytes32', name: 'node', type: 'bytes32' },
+      { internalType: 'string', name: 'key', type: 'string' },
+    ],
     name: 'text',
-    type: 'function',
+    outputs: [{ internalType: 'string', name: '', type: 'string' }],
     stateMutability: 'view',
-    inputs: [
-      { name: 'node', type: 'bytes32' },
-      { name: 'key', type: 'string' },
-    ],
-    outputs: [{ type: 'string' }],
+    type: 'function',
   },
+  // addr(bytes32 node) → address
   {
+    inputs: [{ internalType: 'bytes32', name: 'node', type: 'bytes32' }],
     name: 'addr',
-    type: 'function',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
     stateMutability: 'view',
-    inputs: [{ name: 'node', type: 'bytes32' }],
-    outputs: [{ type: 'address' }],
-  },
-  {
-    name: 'setAddr',
     type: 'function',
-    stateMutability: 'nonpayable',
+  },
+  // setAddr(bytes32 node, address a)
+  {
     inputs: [
-      { name: 'node', type: 'bytes32' },
-      { name: 'a', type: 'address' },
+      { internalType: 'bytes32', name: 'node', type: 'bytes32' },
+      { internalType: 'address', name: 'a', type: 'address' },
     ],
+    name: 'setAddr',
     outputs: [],
-  },
-  // Multicall for batching setText + setAddr in one tx
-  {
-    name: 'multicall',
-    type: 'function',
     stateMutability: 'nonpayable',
-    inputs: [{ name: 'data', type: 'bytes[]' }],
-    outputs: [{ type: 'bytes[]' }],
+    type: 'function',
+  },
+  // multicall(bytes[] data) → bytes[]
+  {
+    inputs: [{ internalType: 'bytes[]', name: 'data', type: 'bytes[]' }],
+    name: 'multicall',
+    outputs: [{ internalType: 'bytes[]', name: 'results', type: 'bytes[]' }],
+    stateMutability: 'nonpayable',
+    type: 'function',
   },
 ] as const
 
@@ -227,11 +247,17 @@ export async function createBotSubdomain(
   const parentNode = namehash(ENS_PARENT_NAME)
   
   // Verify parent name is wrapped in NameWrapper (required for setSubnodeRecord)
+  // The Sepolia NameWrapper uses the 2-arg overload: isWrapped(parentNode, labelhash)
+  // For a .eth name like claw2claw.eth: parentNode = namehash('eth'), labelhash = keccak256('claw2claw')
+  const ethNode = namehash('eth')
+  const parentLabel = ENS_PARENT_NAME.replace(/\.eth$/, '')
+  const parentLabelhash = keccak256(toBytes(parentLabel))
+  
   const isWrapped = await publicClient.readContract({
     address: ENS_CONTRACTS.nameWrapper,
     abi: nameWrapperAbi,
     functionName: 'isWrapped',
-    args: [parentNode],
+    args: [ethNode, parentLabelhash],
   })
   if (!isWrapped) {
     throw new Error(
