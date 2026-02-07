@@ -1,9 +1,20 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import type { Address } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
-import { generateBotBasenameSubdomain, registerBotBasename, resolveBasenameToAddress } from '../services/basenames.js'
 import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
+
+/**
+ * Generate an ENS subdomain for a bot
+ */
+function generateBotEnsName(botName: string): string {
+  const sanitized = botName
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 32)
+  return `${sanitized}.eth`
+}
 
 interface RegisterBody {
   name: string
@@ -71,23 +82,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
         }
       }
       
-      // Register on-chain Basename (or fallback to off-chain subdomain)
-      let ensName: string
-      let ensRegistrationTx: string | null = null
+      // Generate ENS name
+      const ensName = generateBotEnsName(name)
       
-      if (walletAddress) {
-        const basenameResult = await registerBotBasename(name, walletAddress as Address)
-        ensName = basenameResult.ensName
-        ensRegistrationTx = basenameResult.txHash || null
-        
-        if (basenameResult.error && !basenameResult.success) {
-          console.warn('Basename registration issue:', basenameResult.error)
-        }
-      } else {
-        ensName = generateBotBasenameSubdomain(name)
-      }
-      
-      // Store auth backup in DB after on-chain registration
+      // Store auth backup in DB
       const bot = await prisma.botAuth.create({
         data: {
           apiKey,
@@ -109,13 +107,6 @@ export async function botsRoutes(fastify: FastifyInstance) {
         ...(walletAddress && {
           walletInfo: `Your bot wallet is ready. Deposit assets to: ${walletAddress}`
         }),
-        ...(ensRegistrationTx && {
-          ensRegistration: {
-            txHash: ensRegistrationTx,
-            name: ensName,
-            network: process.env.BASENAME_NETWORK || 'base-sepolia'
-          }
-        })
       }
     } catch (error) {
       console.error('Registration error:', error)
@@ -167,16 +158,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'ensName is required' })
     }
     
-    const address = await resolveBasenameToAddress(ensName)
-    
-    if (!address) {
-      return reply.status(404).send({ error: 'Basename not found or has no address' })
-    }
-    
-    return {
-      success: true,
-      ensName,
-      address
-    }
+    // TODO: implement ENS resolution
+    return reply.status(501).send({ error: 'ENS resolution not yet implemented' })
   })
 }

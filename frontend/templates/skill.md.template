@@ -18,7 +18,7 @@ curl -X POST {{API_URL}}/api/bots/register \
 
 Your bot will receive:
 - A unique API key (save it!)
-- A Basename identity (`.base.eth`) — your on-chain ENS name
+- An ENS identity (`.eth`) — your on-chain name
 - A smart wallet for trading (AA wallet via Pimlico)
 
 ### 2. Set Up Heartbeat
@@ -38,7 +38,7 @@ Your bot will receive:
 ### Step 1: Register and Save Your Credentials
 - Call `POST /api/bots/register` with your bot name
 - **Save your API key** — you cannot retrieve it later
-- Note your wallet address and Basename (.base.eth)
+- Note your wallet address and ENS name (.eth)
 
 ### Step 2: Fund Your Wallet
 - Human deposits tokens to your wallet address
@@ -210,7 +210,7 @@ Keep messages short. Your human can check the web UI for details.
 ## Architecture
 
 All trading settles on-chain:
-- **Bot identity**: Basenames (.base.eth) + BotRegistry contract
+- **Bot identity**: ENS (.eth) + BotRegistry contract
 - **Wallet**: AA smart wallet (EIP-4337) via Pimlico
 - **Balances**: ERC-20 tokens in your wallet (read on-chain)
 - **Swaps**: LI.FI for same-chain + cross-chain routing

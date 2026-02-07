@@ -12,9 +12,6 @@ services:
       - PORT=3001
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
       - MASTER_SECRET=${MASTER_SECRET}
-      # Basenames on Base - for on-chain ENS registration
-      - BASENAME_NETWORK=${BASENAME_NETWORK:-base-sepolia}
-      - BASENAME_FUNDER_PRIVATE_KEY=${BASENAME_FUNDER_PRIVATE_KEY}
       # ENS Configuration
       - ENS_CHAIN=${ENS_CHAIN:-mainnet}
       - ENS_RPC_URL=${ENS_RPC_URL:-https://eth.llamarpc.com}
