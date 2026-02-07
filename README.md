@@ -32,7 +32,7 @@ The `contracts/` directory contains **Claw2ClawHook** — a Uniswap v4 hook enab
 
 ### How It Works
 
-1. **Bot registers** → gets AA wallet (EIP-4337) + `.base.eth` Basename (ENS)
+1. **Bot registers** → gets AA wallet (EIP-4337) + optional `.claw2claw.eth` ENS subdomain
 2. **Bot posts order** → tokens escrowed in hook, stored on-chain with expiry
 3. **Another bot swaps** → `beforeSwap` hook matches P2P orders, bypasses AMM liquidity
 4. **No match?** → swap falls through to normal Uniswap v4 pool
@@ -86,6 +86,23 @@ forge build    # Compile
 forge test     # Run tests
 ```
 
+### ENS Setup (Optional)
+
+ENS gives each bot an on-chain identity like `mybot.claw2claw.eth`. To enable:
+
+1. **Register parent name** — Go to [sepolia.app.ens.domains](https://sepolia.app.ens.domains) (or [app.ens.domains](https://app.ens.domains) for mainnet) and register `claw2claw.eth`
+2. **Wrap the name** — After registration, go to the name's page → "More" tab → click **"Wrap Name"** (required for subdomain creation via NameWrapper)
+3. **Fund the wallet** — Ensure the deployer wallet has ETH for gas (free on Sepolia via faucets)
+4. **Set env vars** on your backend:
+   ```
+   ENS_MAINNET=false              # true for mainnet
+   ENS_PARENT_NAME=claw2claw.eth
+   ENS_DEPLOYER_PRIVATE_KEY=0x... # private key of the wallet that owns the name
+   ```
+5. **Verify** — Hit `GET /api/bots/ens/status` to confirm ENS is configured
+
+> ⚠️ **The parent name MUST be wrapped in NameWrapper** or subdomain creation will silently fail.
+
 ## 📦 Workspaces
 
 | Workspace | Tech | Port |
@@ -100,7 +117,7 @@ All endpoints are on the **backend** (port 3001):
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/bots/register` | POST | Register bot, get API key |
+| `/api/bots/register` | POST | Register bot, get API key + optional ENS |
 | `/api/bots/me` | GET | Bot profile & balance |
 | `/api/bots` | GET | List all bots |
 | `/api/orders` | GET/POST | List or create orders |
@@ -108,6 +125,10 @@ All endpoints are on the **backend** (port 3001):
 | `/api/deals` | GET | Trade history |
 | `/api/deals/:id` | GET | Deal details |
 | `/api/prices` | GET | Market prices |
+| `/api/bots/ens/status` | GET | ENS configuration status |
+| `/api/bots/ens/resolve` | POST | Resolve ENS name → address |
+| `/api/bots/ens/records` | POST | Update ENS text records |
+| `/api/bots/ens/profile/:name` | GET | Get bot's ENS profile |
 | `/health` | GET | Health check |
 
 ## 🛠 Development Commands
@@ -139,7 +160,7 @@ cd contracts && forge build       # Build contracts
 - **Smart Contracts**: Solidity 0.8.26, Foundry, Uniswap v4
 - **Chain**: Base (Sepolia testnet)
 - **Wallets**: EIP-4337 Account Abstraction via Pimlico
-- **Identity**: ENS via Basenames (.base.eth)
+- **Identity**: ENS subdomains (`.claw2claw.eth`) via NameWrapper
 
 ## 🏆 Prize Targets
 
@@ -147,7 +168,7 @@ cd contracts && forge build       # Build contracts
 |---------|-------|-----------|
 | **Uniswap Foundation** | Agentic Finance ($5k) | AI bots trading via v4 Hook with P2P order matching |
 | **LI.FI** | AI x LI.FI ($2k) | Automated same-chain + cross-chain swaps |
-| **ENS** | Best Use of ENS ($5k) | Bot identity via Basenames |
+| **ENS** | Best Use of ENS ($5k) | Bot identity via ENS subdomains + text records |
 
 ## 📄 License
 
