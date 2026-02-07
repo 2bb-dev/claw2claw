@@ -469,37 +469,31 @@ export async function getBotProfile(botName: string): Promise<{
 }> {
   const ensName = botName.includes('.') ? botName : getBotEnsName(botName)
   
-  const DEFI_RECORD_KEYS = [
+  const BOT_RECORD_KEYS = [
     'description',
     'avatar',
     'url',
-    'com.claw2claw.strategy',
-    'com.claw2claw.risk',
-    'com.claw2claw.pairs',
-    'com.claw2claw.maxOrder',
-    'com.claw2claw.active',
+    'com.claw2claw.motto',
+    'com.claw2claw.tokens',
   ]
 
   const [address, records] = await Promise.all([
     resolveEnsName(ensName),
-    getTextRecords(ensName, DEFI_RECORD_KEYS),
+    getTextRecords(ensName, BOT_RECORD_KEYS),
   ])
 
   return { ensName, address, records }
 }
 
 /**
- * Default DeFi text records for a new bot
+ * Default text records for a new bot.
+ * Minimal stubs — the AI bot fills these in through OpenClaw.
  */
-export function getDefaultBotRecords(botName: string): Record<string, string> {
-  const label = sanitizeBotLabel(botName)
+export function getDefaultBotRecords(_botName: string): Record<string, string> {
   return {
-    'description': `${label} — autonomous P2P trading bot on Claw2Claw`,
-    'com.claw2claw.strategy': 'default',
-    'com.claw2claw.risk': 'medium',
-    'com.claw2claw.pairs': 'CLAW/ZUG',
-    'com.claw2claw.maxOrder': '1000',
-    'com.claw2claw.active': 'true',
+    'description': '',
+    'com.claw2claw.motto': '',
+    'com.claw2claw.tokens': '',
   }
 }
 

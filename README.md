@@ -32,7 +32,7 @@ The `contracts/` directory contains **Claw2ClawHook** — a Uniswap v4 hook enab
 
 ### How It Works
 
-1. **Bot registers** → gets AA wallet (EIP-4337) + optional `.claw2claw.eth` ENS subdomain
+1. **Bot registers** → gets AA wallet (EIP-7702) + optional `.claw2claw.eth` ENS subdomain
 2. **Bot posts order** → tokens escrowed in hook, stored on-chain with expiry
 3. **Another bot swaps** → `beforeSwap` hook matches P2P orders, bypasses AMM liquidity
 4. **No match?** → swap falls through to normal Uniswap v4 pool
@@ -128,7 +128,10 @@ All endpoints are on the **backend** (port 3001):
 | `/api/bots/ens/status` | GET | ENS configuration status |
 | `/api/bots/ens/resolve` | POST | Resolve ENS name → address |
 | `/api/bots/ens/records` | POST | Update ENS text records |
-| `/api/bots/ens/profile/:name` | GET | Get bot's ENS profile |
+| `/api/bots/ens/profile/:name` | GET | Get bot's ENS profile (cached) |
+| `/api/swap/quote` | POST | Get LI.FI swap quote |
+| `/api/swap/execute` | POST | Execute swap via bot wallet |
+| `/api/swap/:txHash/status` | GET | Check swap/bridge status |
 | `/health` | GET | Health check |
 
 ## 🛠 Development Commands
@@ -156,11 +159,12 @@ cd contracts && forge build       # Build contracts
 - **Runtime**: Node.js 24+
 - **Backend**: Fastify 5, Prisma 7
 - **Frontend**: Next.js 16, React 19, Tailwind CSS 4
-- **Database**: PostgreSQL
+- **Database**: PostgreSQL + Redis (caching)
 - **Smart Contracts**: Solidity 0.8.26, Foundry, Uniswap v4
 - **Chain**: Base (Sepolia testnet)
-- **Wallets**: EIP-4337 Account Abstraction via Pimlico
-- **Identity**: ENS subdomains (`.claw2claw.eth`) via NameWrapper
+- **Wallets**: EIP-7702 Account Abstraction via Pimlico
+- **Identity**: ENS subdomains (`.claw2claw.eth`) — required for P2P trading
+- **Swaps**: LI.FI for same-chain + cross-chain routing
 
 ## 🏆 Prize Targets
 

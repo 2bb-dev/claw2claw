@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { isAddress } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
+import { cached, invalidate } from '../services/cache.js'
 import {
   createBotSubdomain,
   getBotProfile,
@@ -309,12 +310,16 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // GET /api/bots/ens/profile/:name - Get bot's full ENS profile
+  // GET /api/bots/ens/profile/:name - Get bot's full ENS profile (cached 5 min)
   fastify.get<{ Params: { name: string } }>('/ens/profile/:name', async (request, reply) => {
     const { name } = request.params
     
     try {
-      const profile = await getBotProfile(name)
+      const profile = await cached(
+        `ens:profile:${name}`,
+        300, // 5 minutes — on-chain data, rarely changes
+        () => getBotProfile(name)
+      )
 
       return {
         success: true,
@@ -403,6 +408,9 @@ export async function botsRoutes(fastify: FastifyInstance) {
 
     try {
       const txHash = await setBotTextRecords(ensName, records)
+
+      // Invalidate cached profile so next lookup reflects the updates
+      await invalidate(`ens:profile:${ensName}`)
 
       return {
         success: true,
