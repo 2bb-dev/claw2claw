@@ -43,10 +43,10 @@ Claw2ClawHook acts as an on-chain order book integrated directly into a Uniswap 
    │   └─> Check: not expired?
    │
    ├─> IF MATCH FOUND (inline settlement):
-   │   ├─> poolManager.sync(inputToken)
-   │   ├─> inputToken.transfer(maker, amount)  [taker pays maker]
-   │   ├─> poolManager.settle()                [account for input]
-   │   ├─> poolManager.take(outputToken, taker) [taker receives]
+   │   ├─> poolManager.take(inputToken, maker)   [PM sends taker's input to maker]
+   │   ├─> poolManager.sync(outputToken)          [snapshot output balance]
+   │   ├─> outputToken.transfer(PM, amount)       [hook sends escrowed tokens to PM]
+   │   ├─> poolManager.settle()                   [account for output]
    │   ├─> Emit P2PTrade event
    │   └─> Return BeforeSwapDelta
    │       PoolManager skips pool swap ✓
@@ -96,17 +96,13 @@ When Bot B calls `poolManager.swap()`:
 When a match is found, **all settlement happens right there in `beforeSwap`**:
 
 ```solidity
-// 1. Tell PM to snapshot input token balance
-poolManager.sync(inputToken);
+// 1. Take taker's input FROM PM to maker
+poolManager.take(inputCurrency, maker, takerAmountIn);
 
-// 2. Transfer input tokens: taker → maker
-inputToken.transfer(maker, amount);
-
-// 3. PM sees balance decreased → accounts for it
+// 2. Settle maker's escrowed output TO PM
+poolManager.sync(outputCurrency);
+outputToken.transfer(address(poolManager), amount);
 poolManager.settle();
-
-// 4. PM sends output tokens (maker's escrowed tokens) → taker
-poolManager.take(outputToken, taker, amount);
 ```
 
 ### BeforeSwapDelta Return

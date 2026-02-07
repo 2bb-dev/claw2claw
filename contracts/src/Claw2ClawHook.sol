@@ -8,7 +8,6 @@ import {Currency, CurrencyLibrary} from "@v4-core/types/Currency.sol";
 import {BalanceDelta, BalanceDeltaLibrary} from "@v4-core/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "@v4-core/types/BeforeSwapDelta.sol";
 import {IERC20} from "forge-std/interfaces/IERC20.sol";
-import {CurrencySettler} from "@v4-core/../test/utils/CurrencySettler.sol";
 
 /// @title Claw2ClawHook
 /// @notice Uniswap v4 hook enabling P2P order matching between whitelisted bots.
@@ -16,7 +15,6 @@ import {CurrencySettler} from "@v4-core/../test/utils/CurrencySettler.sol";
 contract Claw2ClawHook is IHooks {
     using BalanceDeltaLibrary for BalanceDelta;
     using CurrencyLibrary for Currency;
-    using CurrencySettler for Currency;
 
     struct Order {
         address maker;
@@ -41,6 +39,8 @@ contract Claw2ClawHook is IHooks {
     error OrderNotFound();
     error OrderNotActive();
     error Unauthorized();
+    error ExactInputOnly();
+    error AmountOverflow();
 
     // State
     address public admin;
@@ -82,7 +82,8 @@ contract Claw2ClawHook is IHooks {
         orderId = nextOrderId++;
         orders[orderId] = Order(msg.sender, sellToken0, amountIn, minAmountOut, block.timestamp + duration, true);
         Currency tokenIn = sellToken0 ? key.currency0 : key.currency1;
-        IERC20(Currency.unwrap(tokenIn)).transferFrom(msg.sender, address(this), amountIn);
+        bool success = IERC20(Currency.unwrap(tokenIn)).transferFrom(msg.sender, address(this), amountIn);
+        require(success, "Transfer failed");
         bytes32 poolId = keccak256(abi.encode(key));
         poolOrders[poolId].push(orderId);
         emit OrderPosted(orderId, msg.sender, sellToken0, amountIn, minAmountOut, block.timestamp + duration);
@@ -95,7 +96,8 @@ contract Claw2ClawHook is IHooks {
         if (!order.active) revert OrderNotActive();
         order.active = false;
         Currency tokenIn = order.sellToken0 ? key.currency0 : key.currency1;
-        IERC20(Currency.unwrap(tokenIn)).transfer(order.maker, order.amountIn);
+        bool success = IERC20(Currency.unwrap(tokenIn)).transfer(order.maker, order.amountIn);
+        require(success, "Transfer failed");
         emit OrderCancelled(orderId, order.maker);
     }
 
@@ -109,11 +111,15 @@ contract Claw2ClawHook is IHooks {
         external onlyPoolManager returns (bytes4, BeforeSwapDelta, uint24)
     {
         if (!allowedBots[sender]) revert NotWhitelisted();
+        // Only exact-input swaps supported (amountSpecified < 0 in Uni v4)
+        if (params.amountSpecified >= 0) revert ExactInputOnly();
+        // Safe cast: negate and check fits in uint128
+        uint256 absAmount = uint256(-params.amountSpecified);
+        if (absAmount > type(uint128).max) revert AmountOverflow();
+        uint128 takerAmountIn = uint128(absAmount);
 
         bytes32 poolId = keccak256(abi.encode(key));
         uint256[] storage orderIds = poolOrders[poolId];
-        uint128 takerAmountIn = uint128(params.amountSpecified < 0
-            ? uint256(-params.amountSpecified) : uint256(params.amountSpecified));
 
         for (uint256 i = 0; i < orderIds.length; i++) {
             Order storage order = orders[orderIds[i]];
@@ -133,7 +139,8 @@ contract Claw2ClawHook is IHooks {
 
             // 2. Settle maker's escrowed output TO PM (hook pays PM)
             poolManager.sync(outputCurrency);
-            IERC20(Currency.unwrap(outputCurrency)).transfer(address(poolManager), order.amountIn);
+            bool success = IERC20(Currency.unwrap(outputCurrency)).transfer(address(poolManager), order.amountIn);
+            require(success, "Transfer failed");
             poolManager.settle();
 
             emit P2PTrade(
@@ -145,9 +152,12 @@ contract Claw2ClawHook is IHooks {
             // Return delta: cancel the swap entirely
             // specifiedDelta = -amountSpecified → amountToSwap becomes 0
             // unspecifiedDelta = +amountSpecified → hook handled the output
+            // Safe: we already validated amountSpecified fits in int128 via uint128 check
+            int128 specified = int128(-params.amountSpecified);
+            int128 unspecified = int128(params.amountSpecified);
             return (
                 IHooks.beforeSwap.selector,
-                toBeforeSwapDelta(int128(-params.amountSpecified), int128(params.amountSpecified)),
+                toBeforeSwapDelta(specified, unspecified),
                 0
             );
         }

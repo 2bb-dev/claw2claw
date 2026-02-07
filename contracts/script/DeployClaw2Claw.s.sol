@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 /// @title DeployClaw2Claw
 /// @notice Deploys the Claw2ClawHook P2P order matching system on Base Sepolia
-/// @dev Uses CREATE2 to mine a hook address with the correct flag bits (0x180)
+/// @dev Uses CREATE2 to mine a hook address with the correct flag bits (0x0188)
 
 import "forge-std/Script.sol";
 import {Claw2ClawHook} from "../src/Claw2ClawHook.sol";

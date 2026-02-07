@@ -269,7 +269,6 @@ contract Claw2ClawHookTest is Test {
         uint256 orderId = hook.postOrder(poolKey, true, 100 ether, 95 ether, 3600);
 
         // Record balances before match
-        uint256 makerToken0Before = token0.balanceOf(botA);
         uint256 makerToken1Before = token1.balanceOf(botA);
         uint256 hookToken0Before = token0.balanceOf(address(hook));
 
