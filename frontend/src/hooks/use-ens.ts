@@ -156,7 +156,7 @@ export function useBotEnsProfile(ensName: string | undefined) {
   const active = useBotActive(ensName)
   const description = useBotDescription(ensName)
 
-  const isLoading = address.isLoading || strategy.isLoading || risk.isLoading
+  const isLoading = address.isLoading || avatar.isLoading || strategy.isLoading || risk.isLoading || pairs.isLoading || maxOrder.isLoading || active.isLoading || description.isLoading
 
   return {
     ensName,

@@ -78,6 +78,13 @@ export async function botsRoutes(fastify: FastifyInstance) {
           error: 'name is required'
         })
       }
+
+      // ENS creation requires a real wallet address — reject zero-address
+      if (createEns && !createWallet) {
+        return reply.status(400).send({
+          error: 'createWallet is required when createEns is true (ENS addr record needs a real address)'
+        })
+      }
       
       const apiKey = generateApiKey()
       
@@ -95,28 +102,31 @@ export async function botsRoutes(fastify: FastifyInstance) {
         }
       }
       
-      // Create ENS subdomain if requested and configured
+      // Create ENS subdomain if requested, configured, and wallet exists
       let ensTxHash: string | null = null
       let ensName: string | null = null
       
-      if (createEns && isEnsConfigured()) {
+      if (createEns && isEnsConfigured() && walletAddress) {
+        // Step 1: Create the subdomain (on-chain tx)
         try {
-          const botWalletAddress = walletAddress || '0x0000000000000000000000000000000000000000'
-          const result = await createBotSubdomain(name, botWalletAddress)
+          const result = await createBotSubdomain(name, walletAddress)
           ensName = result.ensName
           ensTxHash = result.txHash
-
-          // Set default DeFi text records (deployer owns subname, so this works)
-          const defaultRecords = getDefaultBotRecords(name)
-          await setBotTextRecords(ensName, defaultRecords)
-
-          // Note: createBotSubdomain already sets the addr record via setAddr()
-
           console.log(`[ENS] Bot ${name} registered as ${ensName}`)
         } catch (error) {
           console.error('ENS subdomain creation failed:', error)
           // Don't fail registration if ENS fails — it's optional
-          ensName = null
+        }
+
+        // Step 2: Set default text records (separate try/catch so subdomain persists)
+        if (ensName) {
+          try {
+            const defaultRecords = getDefaultBotRecords(name)
+            await setBotTextRecords(ensName, defaultRecords)
+          } catch (error) {
+            console.error('ENS text record setup failed:', error)
+            // Subdomain exists; keep ensName/ensTxHash so it remains discoverable
+          }
         }
       }
       
@@ -299,8 +309,8 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
 
     const { records } = request.body
-    if (!records || Object.keys(records).length === 0) {
-      return reply.status(400).send({ error: 'records object is required' })
+    if (!records || typeof records !== 'object' || Array.isArray(records) || Object.keys(records).length === 0) {
+      return reply.status(400).send({ error: 'records must be a non-empty object' })
     }
 
     // Limit record count and value sizes to prevent gas drain
@@ -310,7 +320,12 @@ export async function botsRoutes(fastify: FastifyInstance) {
     if (entries.length > MAX_RECORDS) {
       return reply.status(400).send({ error: `Too many records (max ${MAX_RECORDS})` })
     }
-    const oversized = entries.filter(([, v]) => typeof v === 'string' && v.length > MAX_VALUE_LENGTH).map(([k]) => k)
+    // Reject non-string values — they would fail ABI encoding
+    const nonStringKeys = entries.filter(([, v]) => typeof v !== 'string').map(([k]) => k)
+    if (nonStringKeys.length > 0) {
+      return reply.status(400).send({ error: `Record values must be strings: ${nonStringKeys.join(', ')}` })
+    }
+    const oversized = entries.filter(([, v]) => (v as string).length > MAX_VALUE_LENGTH).map(([k]) => k)
     if (oversized.length > 0) {
       return reply.status(400).send({ error: `Record values too long (max ${MAX_VALUE_LENGTH}): ${oversized.join(', ')}` })
     }
