@@ -105,78 +105,69 @@ export async function botsRoutes(fastify: FastifyInstance) {
         }
       }
       
-      // Create ENS subdomain if requested, configured, and wallet was successfully created
-      let ensTxHash: string | null = null
-      let ensName: string | null = null
-      let recordsTxHash: string | null = null
-      
-      let ensError: string | null = null
-      
-      if (createEns && isEnsConfigured() && walletAddress) {
-        // Step 1: Create the subdomain (on-chain tx)
-        try {
-          const result = await createBotSubdomain(name, walletAddress)
-          ensName = result.ensName
-          ensTxHash = result.txHash
-          console.log(`[ENS] Bot ${name} registered as ${ensName}`)
-        } catch (error) {
-          console.error('ENS subdomain creation failed:', error)
-          ensError = error instanceof Error ? error.message : String(error)
-          // Don't fail registration if ENS fails — it's optional
-        }
-
-        // Step 2: Set default text records (separate try/catch so subdomain persists)
-        if (ensName) {
-          try {
-            const defaultRecords = getDefaultBotRecords(name)
-            recordsTxHash = await setBotTextRecords(ensName, defaultRecords)
-          } catch (error) {
-            console.error('ENS text record setup failed:', error)
-            // Subdomain exists; keep ensName/ensTxHash so it remains discoverable
-          }
-        }
-      } else if (createEns && !isEnsConfigured()) {
-        ensError = 'ENS not configured: ENS_DEPLOYER_PRIVATE_KEY is missing'
-      } else if (createEns && !walletAddress) {
-        ensError = 'Wallet creation failed — ENS requires a wallet address'
-      }
-      
-      // Store in DB — ensName is saved so we can look it up without on-chain calls
-      // The on-chain state is the source of truth; DB is a fast cache.
+      // Store in DB immediately — fast response, ENS minting happens async
       const bot = await prisma.botAuth.create({
         data: {
           apiKey,
-          ensName,
           walletAddress,
           encryptedWalletKey,
         },
       })
+
+      // Determine ENS eligibility
+      let ensStatus: string | null = null
+
+      if (createEns && !isEnsConfigured()) {
+        ensStatus = 'skipped: ENS_DEPLOYER_PRIVATE_KEY not configured'
+      } else if (createEns && !walletAddress) {
+        ensStatus = 'skipped: wallet creation failed — ENS requires a wallet address'
+      } else if (createEns && isEnsConfigured() && walletAddress) {
+        ensStatus = 'minting — check /api/bots/me for status'
+
+        // Fire-and-forget: mint ENS subdomain in the background
+        // Updates the DB record when the on-chain tx confirms
+        ;(async () => {
+          try {
+            const result = await createBotSubdomain(name, walletAddress)
+            console.log(`[ENS] Bot ${name} registered as ${result.ensName} (tx: ${result.txHash})`)
+
+            // Update DB with ENS name
+            await prisma.botAuth.update({
+              where: { id: bot.id },
+              data: { ensName: result.ensName },
+            })
+
+            // Set default text records (best-effort)
+            try {
+              const defaultRecords = getDefaultBotRecords(name)
+              await setBotTextRecords(result.ensName, defaultRecords)
+              console.log(`[ENS] Text records set for ${result.ensName}`)
+            } catch (error) {
+              console.error(`[ENS] Text record setup failed for ${result.ensName}:`, error)
+            }
+          } catch (error) {
+            console.error(`[ENS] Subdomain creation failed for bot ${bot.id}:`, error)
+          }
+        })()
+      }
       
       return {
         success: true,
         bot: {
           id: bot.id,
           apiKey: bot.apiKey,
-          ensName: bot.ensName || null,
+          ensName: null, // Will be populated async — check /api/bots/me
           wallet: bot.walletAddress,
         },
-        ...(ensTxHash && ensName && {
-          ens: {
-            name: ensName,
-            txHash: ensTxHash,
-            ...(recordsTxHash && {
-              records: getDefaultBotRecords(name),
-              recordsTxHash,
-            }),
-            explorer: `https://${getEnsConfig().network === 'mainnet' ? '' : 'sepolia.'}app.ens.domains/${ensName}`,
-          }
-        }),
+        ...(ensStatus && { ensStatus }),
         important: "SAVE YOUR API KEY! You need it for all requests.",
         ...(walletAddress && {
           walletInfo: `Your bot wallet is ready. Deposit assets to: ${walletAddress}`
         }),
-        ...(ensError && { ensError }),
         ...(walletError && { walletError }),
+        ...(createEns && isEnsConfigured() && walletAddress && {
+          ensInfo: 'ENS subdomain is being minted on-chain. Poll GET /api/bots/me to check when ensName is ready.',
+        }),
       }
     } catch (error) {
       console.error('Registration error:', error)

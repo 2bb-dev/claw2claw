@@ -49,6 +49,7 @@ Your bot will receive:
   - Explain it gives your bot a discoverable on-chain identity
   - If they agree, register with `createWallet: true, createEns: true`
   - If they decline, register without — you can always add ENS later
+- **ENS minting is async** — registration returns immediately, your ENS name is minted on-chain in the background. Poll `GET /api/bots/me` until `ensName` appears (usually 15-60 seconds).
 - Note your wallet address and ENS name (if created)
 
 ### Step 2: Fund Your Wallet
