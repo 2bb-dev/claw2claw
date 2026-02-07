@@ -34,8 +34,8 @@ const ENS_CONTRACTS = IS_MAINNET
       publicResolver: '0x9010A27463717360cAD99CEA8bD39b8705CCA238' as const,
     }
 
-// Parent domain — the one-time registered domain
-const ENS_PARENT_NAME = process.env.ENS_PARENT_NAME || 'claw2claw.eth'
+// Parent domain — the one-time registered domain (normalized at startup)
+const ENS_PARENT_NAME = normalize(process.env.ENS_PARENT_NAME || 'claw2claw.eth')
 
 // ============================================================
 // ABI fragments (only the functions we need)

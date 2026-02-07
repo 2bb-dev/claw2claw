@@ -2,8 +2,7 @@
 
 /**
  * ENS Hooks — wagmi hooks for ENS name resolution and text records
- * 
- * These are the "couple wagmi hooks" the prize rules mention.
+ *
  * All ENS-specific code for the frontend lives here.
  */
 import { useEnsName, useEnsAddress, useEnsAvatar, useEnsText } from 'wagmi'
@@ -166,7 +165,7 @@ export function useBotEnsProfile(ensName: string | undefined) {
     risk: risk.data,
     pairs: pairs.data,
     maxOrder: maxOrder.data,
-    active: active.data === 'true',
+    active: active.data !== undefined ? active.data === 'true' : undefined,
     description: description.data,
     isLoading,
   }

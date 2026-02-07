@@ -79,7 +79,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
         })
       }
 
-      // ENS creation requires a real wallet address — reject zero-address
+      // ENS requires a real wallet — reject upfront if wallet won't be created
       if (createEns && !createWallet) {
         return reply.status(400).send({
           error: 'createWallet is required when createEns is true (ENS addr record needs a real address)'
@@ -102,9 +102,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
         }
       }
       
-      // Create ENS subdomain if requested, configured, and wallet exists
+      // Create ENS subdomain if requested, configured, and wallet was successfully created
       let ensTxHash: string | null = null
       let ensName: string | null = null
+      let recordsTxHash: string | null = null
       
       if (createEns && isEnsConfigured() && walletAddress) {
         // Step 1: Create the subdomain (on-chain tx)
@@ -122,7 +123,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
         if (ensName) {
           try {
             const defaultRecords = getDefaultBotRecords(name)
-            await setBotTextRecords(ensName, defaultRecords)
+            recordsTxHash = await setBotTextRecords(ensName, defaultRecords)
           } catch (error) {
             console.error('ENS text record setup failed:', error)
             // Subdomain exists; keep ensName/ensTxHash so it remains discoverable
@@ -153,7 +154,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
           ens: {
             name: ensName,
             txHash: ensTxHash,
-            records: getDefaultBotRecords(name),
+            ...(recordsTxHash && {
+              records: getDefaultBotRecords(name),
+              recordsTxHash,
+            }),
             explorer: `https://${getEnsConfig().network === 'mainnet' ? '' : 'sepolia.'}app.ens.domains/${ensName}`,
           }
         }),
@@ -313,8 +317,9 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'records must be a non-empty object' })
     }
 
-    // Limit record count and value sizes to prevent gas drain
+    // Limit record count, key length, and value sizes to prevent gas drain
     const MAX_RECORDS = 20
+    const MAX_KEY_LENGTH = 64
     const MAX_VALUE_LENGTH = 512
     const entries = Object.entries(records)
     if (entries.length > MAX_RECORDS) {
@@ -324,6 +329,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
     const nonStringKeys = entries.filter(([, v]) => typeof v !== 'string').map(([k]) => k)
     if (nonStringKeys.length > 0) {
       return reply.status(400).send({ error: `Record values must be strings: ${nonStringKeys.join(', ')}` })
+    }
+    const longKeys = entries.filter(([k]) => k.length > MAX_KEY_LENGTH).map(([k]) => k)
+    if (longKeys.length > 0) {
+      return reply.status(400).send({ error: `Record keys too long (max ${MAX_KEY_LENGTH}): ${longKeys.join(', ')}` })
     }
     const oversized = entries.filter(([, v]) => (v as string).length > MAX_VALUE_LENGTH).map(([k]) => k)
     if (oversized.length > 0) {
