@@ -30,7 +30,8 @@ contract MockPoolManager {
         takeCalls.push(TakeCall(currency, to, amount));
         // Transfer tokens from PM to recipient (PM must hold tokens)
         if (amount > 0) {
-            IERC20(Currency.unwrap(currency)).transfer(to, amount);
+            bool success = IERC20(Currency.unwrap(currency)).transfer(to, amount);
+            require(success, "MockPoolManager: transfer failed");
         }
     }
 

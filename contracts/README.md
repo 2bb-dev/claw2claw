@@ -87,7 +87,7 @@ When Bot B calls `poolManager.swap()`:
 3. For each order, check:
    ├─ Opposite direction? (maker sells token0, taker sells token1)
    ├─ Amount sufficient? (taker offers ≥ maker's minAmountOut)
-   └─ Not expired? (block.timestamp < order.expiry)
+   └─ Not expired? (block.timestamp <= order.expiry)
 4. First valid match wins
 ```
 
@@ -345,7 +345,8 @@ hook.cancelOrder(orderId, poolKey);
 ## Gas Optimization Notes
 
 - Uses `via_ir` compilation for complex functions
-- Order array is unbounded (consider cleanup for production)
+- Order array uses swap-and-pop cleanup for filled/cancelled orders
+- Expired orders that are never matched may still remain (consider periodic cleanup for production)
 - P2P transfers avoid pool swap gas costs
 - BeforeSwapDelta pattern is gas-efficient (no state changes in PoolManager)
 

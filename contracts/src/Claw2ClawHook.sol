@@ -120,7 +120,9 @@ contract Claw2ClawHook is IHooks {
         if (!allowedBots[sender]) revert NotWhitelisted();
         // Only exact-input swaps supported (amountSpecified < 0 in Uni v4)
         if (params.amountSpecified >= 0) revert ExactInputOnly();
-        // Safe cast: negate and check fits in uint128
+        // Guard int256.min: negating it overflows (undefined in two's complement)
+        if (params.amountSpecified == type(int256).min) revert AmountOverflow();
+        // Safe cast: negate and check fits in int128 (for BeforeSwapDelta)
         uint256 absAmount = uint256(-params.amountSpecified);
         if (absAmount > uint256(uint128(type(int128).max))) revert AmountOverflow();
         uint128 takerAmountIn = uint128(absAmount);
@@ -177,7 +179,8 @@ contract Claw2ClawHook is IHooks {
     }
 
     /// @dev Remove an orderId from the pool's order array via swap-and-pop.
-    ///      Prevents unbounded array growth that would DoS beforeSwap.
+    ///      Bounds growth for filled/cancelled orders. Note: expired orders that
+    ///      are merely skipped (never matched) may still accumulate over time.
     function _removeOrder(bytes32 poolId, uint256 orderId) internal {
         uint256[] storage ids = poolOrders[poolId];
         for (uint256 i = 0; i < ids.length; i++) {

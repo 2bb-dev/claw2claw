@@ -261,6 +261,38 @@ contract Claw2ClawHookTest is Test {
         hook.cancelOrder(orderId, poolKey);
     }
 
+    function test_cancelOrder_wrongPoolKey_doesNotRemoveFromCorrectPool() public {
+        // Post order on the real poolKey
+        vm.prank(botA);
+        uint256 orderId = hook.postOrder(poolKey, true, 100 ether, 90 ether, 3600);
+
+        // Verify order is in the real pool's array
+        uint256[] memory ordersBefore = hook.getPoolOrders(poolKey);
+        assertEq(ordersBefore.length, 1);
+
+        // Build a wrong PoolKey (different fee)
+        PoolKey memory wrongKey = PoolKey({
+            currency0: poolKey.currency0,
+            currency1: poolKey.currency1,
+            fee: 500,             // different fee → different poolId
+            tickSpacing: 10,
+            hooks: poolKey.hooks
+        });
+
+        // Cancel with wrong key — order goes inactive but is NOT removed
+        // from the correct pool's array (it tries to remove from wrongKey's array)
+        vm.prank(botA);
+        hook.cancelOrder(orderId, wrongKey);
+
+        // Order should be inactive
+        (, , , , , bool active) = hook.orders(orderId);
+        assertFalse(active);
+
+        // But the order ID is still in the correct pool's array (not cleaned up)
+        uint256[] memory ordersAfter = hook.getPoolOrders(poolKey);
+        assertEq(ordersAfter.length, 1, "Order not removed from correct pool array");
+    }
+
     // ── P2P matching tests (with settlement verification) ───────────
 
     function test_p2pMatch_success() public {

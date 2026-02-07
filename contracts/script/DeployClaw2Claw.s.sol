@@ -92,7 +92,7 @@ contract DeployClaw2Claw is Script {
                 bytes32(i),
                 initCodeHash
             )))));
-            if (uint160(predicted) & FLAG_MASK == REQUIRED_FLAGS) {
+            if ((uint160(predicted) & FLAG_MASK) == REQUIRED_FLAGS) {
                 salt = bytes32(i);
                 found = true;
                 console.log("Found salt:", i);
