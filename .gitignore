@@ -45,3 +45,8 @@ next-env.d.ts
 # prisma generated
 src/generated/prisma
 frontend/src/generated/prisma
+
+# Foundry submodules (installed via forge install)
+contracts/lib/
+contracts/foundry.lock
+.gitmodules
