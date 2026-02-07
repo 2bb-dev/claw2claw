@@ -2,28 +2,37 @@
  * ENS Service — Direct contract calls via viem
  * 
  * Creates bot subdomains (botname.claw2claw.eth) and manages DeFi text records
- * by calling ENS NameWrapper + PublicResolver contracts directly on Sepolia.
+ * by calling ENS NameWrapper + PublicResolver contracts directly.
  * 
+ * Set ENS_MAINNET=true for mainnet, false/unset for Sepolia testnet.
  * No third-party wrappers — all ENS-specific code written by us.
  */
 import { createPublicClient, createWalletClient, http, namehash, type Hex, encodeFunctionData } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize } from 'viem/ens'
-import { sepolia } from 'viem/chains'
+import { sepolia, mainnet } from 'viem/chains'
 
 // ============================================================
-// ENS Contract Addresses (Sepolia)
-// From: https://docs.ens.domains/learn/deployments#sepolia
+// ENS_MAINNET toggle — switches between mainnet and Sepolia
 // ============================================================
 
-const ENS_CONTRACTS = {
-  // ENSRegistry — core registry
-  registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const,
-  // NameWrapper — wrapped names with subname control
-  nameWrapper: '0xab50971078225D365994dc1Edcb9b7FD72Bb4862' as const,
-  // PublicResolver — text records, addresses, etc.
-  publicResolver: '0x9010A27463717360cAD99CEA8bD39b8705CCA238' as const,
-}
+const IS_MAINNET = process.env.ENS_MAINNET === 'true'
+
+const ENS_CHAIN = IS_MAINNET ? mainnet : sepolia
+
+// Contract addresses differ per network
+// From: https://docs.ens.domains/learn/deployments
+const ENS_CONTRACTS = IS_MAINNET
+  ? {
+      registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const,
+      nameWrapper: '0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401' as const,
+      publicResolver: '0x231b0Ee14048e9dCcD1d247744d114a4EB5E8E63' as const,
+    }
+  : {
+      registry: '0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e' as const,
+      nameWrapper: '0xab50971078225D365994dc1Edcb9b7FD72Bb4862' as const,
+      publicResolver: '0x9010A27463717360cAD99CEA8bD39b8705CCA238' as const,
+    }
 
 // Parent domain — the one-time registered domain
 const ENS_PARENT_NAME = process.env.ENS_PARENT_NAME || 'claw2claw.eth'
@@ -130,11 +139,12 @@ const publicResolverAbi = [
 // Viem Clients
 // ============================================================
 
-const RPC_URL = process.env.SEPOLIA_RPC_URL || 'https://rpc.sepolia.org'
+const RPC_URL = process.env.ENS_RPC_URL
+  || (IS_MAINNET ? 'https://eth.llamarpc.com' : 'https://rpc.sepolia.org')
 
 /** Public client for read-only ENS calls (no gas) */
 const publicClient = createPublicClient({
-  chain: sepolia,
+  chain: ENS_CHAIN,
   transport: http(RPC_URL),
 })
 
@@ -150,7 +160,7 @@ function getWalletClient() {
   const account = privateKeyToAccount(pk as Hex)
   return createWalletClient({
     account,
-    chain: sepolia,
+    chain: ENS_CHAIN,
     transport: http(RPC_URL),
   })
 }

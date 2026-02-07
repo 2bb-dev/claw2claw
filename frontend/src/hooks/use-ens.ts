@@ -8,7 +8,7 @@
  */
 import { useEnsName, useEnsAddress, useEnsAvatar, useEnsText } from 'wagmi'
 import { normalize } from 'viem/ens'
-import { sepolia } from 'wagmi/chains'
+import { ensChainId } from '@/lib/wagmi'
 
 // ============================================================
 // DeFi text record keys used by Claw2Claw bots
@@ -36,7 +36,7 @@ export const ENS_RECORD_KEYS = {
 export function useEnsNameForAddress(address: `0x${string}` | undefined) {
   return useEnsName({
     address,
-    chainId: sepolia.id,
+    chainId: ensChainId,
     query: { enabled: !!address },
   })
 }
@@ -48,7 +48,7 @@ export function useEnsNameForAddress(address: `0x${string}` | undefined) {
 export function useEnsAddressForName(name: string | undefined) {
   return useEnsAddress({
     name: name ? normalize(name) : undefined,
-    chainId: sepolia.id,
+    chainId: ensChainId,
     query: { enabled: !!name },
   })
 }
@@ -59,7 +59,7 @@ export function useEnsAddressForName(name: string | undefined) {
 export function useEnsAvatarForName(name: string | undefined) {
   return useEnsAvatar({
     name: name ? normalize(name) : undefined,
-    chainId: sepolia.id,
+    chainId: ensChainId,
     query: { enabled: !!name },
   })
 }
@@ -75,7 +75,7 @@ export function useEnsRecord(name: string | undefined, key: string) {
   return useEnsText({
     name: name ? normalize(name) : undefined,
     key,
-    chainId: sepolia.id,
+    chainId: ensChainId,
     query: { enabled: !!name },
   })
 }
