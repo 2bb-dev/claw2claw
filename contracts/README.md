@@ -1,4 +1,4 @@
-# Claw2ClawHook - P2P Order Matching on Uniswap v4
+# Claw2ClawHook — P2P Order Matching on Uniswap v4
 
 A Uniswap v4 hook that enables peer-to-peer (P2P) order matching between whitelisted bots, bypassing pool liquidity when matching orders are available.
 
@@ -56,6 +56,88 @@ Claw2ClawHook acts as an on-chain order book integrated directly into a Uniswap 
            PoolManager executes normal pool swap
 ```
 
+## Deep Technical Breakdown
+
+### Hook Permission Flags
+
+Our hook address must end in `0x188`, encoding three permission bits:
+
+| Flag | Value | Purpose |
+|------|-------|---------|
+| `BEFORE_SWAP` | `0x100` (bit 8) | Pool Manager calls us before every swap |
+| `AFTER_SWAP` | `0x080` (bit 7) | Called after swap (we use it as a no-op) |
+| `BEFORE_SWAP_RETURNS_DELTA` | `0x008` (bit 3) | Lets us return custom token deltas |
+| **Total** | **`0x188`** | Combined flag bits |
+
+We mine this address using **CREATE2** — iterate salts until we find one that produces an address with the right suffix.
+
+### The Swap Lifecycle
+
+When Bot B calls `poolManager.swap()`:
+
+1. **Pool Manager enters its unlock context** (a reentrancy-safe callback pattern)
+2. It sees our hook has `BEFORE_SWAP` flag → calls `hook.beforeSwap()`
+3. We're now executing **inside the PM's unlock context**, which means we can call `sync`, `settle`, and `take` directly
+
+### Order Matching (inside `beforeSwap`)
+
+```
+1. Read swap params: direction (zeroForOne), amount
+2. Iterate orders[] for this pool
+3. For each order, check:
+   ├─ Opposite direction? (maker sells token0, taker sells token1)
+   ├─ Amount sufficient? (taker offers ≥ maker's minAmountOut)
+   └─ Not expired? (block.timestamp < order.expiry)
+4. First valid match wins
+```
+
+### Inline Settlement (the key innovation)
+
+When a match is found, **all settlement happens right there in `beforeSwap`**:
+
+```solidity
+// 1. Tell PM to snapshot input token balance
+poolManager.sync(inputToken);
+
+// 2. Transfer input tokens: taker → maker
+inputToken.transfer(maker, amount);
+
+// 3. PM sees balance decreased → accounts for it
+poolManager.settle();
+
+// 4. PM sends output tokens (maker's escrowed tokens) → taker
+poolManager.take(outputToken, taker, amount);
+```
+
+### BeforeSwapDelta Return
+
+We return a packed `int256` with two `int128` values:
+
+```
+┌────────────────┬─────────────────┐
+│  Upper 128bits │  Lower 128bits  │
+│ specifiedDelta │ unspecifiedDelta │
+└────────────────┴─────────────────┘
+
+specifiedDelta   = +amount  → "we handled the input"
+unspecifiedDelta = -amount  → "we provided the output"
+```
+
+When PM sees non-zero deltas, it adjusts the swap math. Since we handled the full amount, **the AMM curve is completely skipped** — no tick crossing, no `sqrt(P)` math, no LP interaction.
+
+### No Match → Normal AMM
+
+If no order matches, we return `BeforeSwapDelta(0, 0)` and the swap proceeds through the constant product formula as if our hook wasn't there.
+
+### Order Storage
+
+| Operation | Mechanism |
+|-----------|-----------|
+| **Storage** | `mapping(PoolId => Order[])` — array of orders per pool |
+| **Post** | Maker approves hook → `transferFrom` tokens into hook → push to array |
+| **Match** | Mark inactive, transfer escrowed tokens to taker via PM |
+| **Cancel** | Maker calls to reclaim escrowed tokens |
+
 ## How P2P Matching Works
 
 ### Order Posting
@@ -103,27 +185,9 @@ The `beforeSwap` hook:
    - Bot B → Bot A: 100 token1 (taker input)
    - Hook → Bot B: 100 token0 (maker's deposited tokens)
 5. **Returns BeforeSwapDelta**:
-   - `specifiedDelta = -100` (hook handled taker's input)
-   - `unspecifiedDelta = +100` (hook provided taker's output)
+   - `specifiedDelta = +100` (hook handled taker's input)
+   - `unspecifiedDelta = -100` (hook provided taker's output)
    - PoolManager sees the swap is complete, skips pool liquidity
-
-### BeforeSwapDelta Explained
-
-`BeforeSwapDelta` is a packed int256 with two int128 values:
-
-```
-┌────────────────┬────────────────┐
-│  Upper 128bits │  Lower 128bits │
-│ specifiedDelta │ unspecifiedDelta│
-└────────────────┴────────────────┘
-```
-
-- **specifiedDelta**: Amount of the "specified" token (the one the user is selling)
-  - Negative = hook consumed tokens from user
-- **unspecifiedDelta**: Amount of the "unspecified" token (the one the user is receiving)
-  - Positive = hook provided tokens to user
-
-When the hook returns non-zero deltas, the PoolManager adjusts the swap accordingly and may skip pool liquidity entirely.
 
 ## Deployment
 
@@ -134,14 +198,14 @@ When the hook returns non-zero deltas, the PoolManager adjusts the swap accordin
 forge install
 
 # Set up environment
-export PRIVATE_KEY=0x...
-export BASESCAN_API_KEY=...
+cp .env.example .env
+# Edit .env with your private keys
 ```
 
 ### Deploy to Base Sepolia
 
 ```bash
-source /root/.bashrc
+source .env
 forge script script/DeployClaw2Claw.s.sol:DeployClaw2Claw \
     --rpc-url base_sepolia \
     --broadcast \
@@ -152,29 +216,18 @@ forge script script/DeployClaw2Claw.s.sol:DeployClaw2Claw \
 
 1. **MockTokens** (CLAW - Claw Token, ZUG - Zug Gold)
 2. **CREATE2 Factory** (for address mining)
-3. **Claw2ClawHook** (with correct flag bits)
+3. **Claw2ClawHook** (with correct flag bits `0x188`)
 4. **Pool Initialization** (CLAW/ZUG pool)
 5. **Liquidity Addition** (initial liquidity for fallback swaps)
 6. **Test Swap** (verify everything works)
 
-### Hook Address Requirements
-
-The hook must have specific flag bits set in its address:
-
-```
-Flags needed:
-  BEFORE_SWAP                = 0x100 (bit 8)
-  AFTER_SWAP                 = 0x080 (bit 7)
-  BEFORE_SWAP_RETURNS_DELTA  = 0x008 (bit 3)
-  Total                      = 0x188
-```
-
-The deployment script mines a CREATE2 salt to find an address with the correct flags.
-
 ## Testing
 
 ```bash
-# Run all tests
+# Install dependencies first
+forge install
+
+# Run all tests (27 tests)
 forge test -vvv
 
 # Run specific test
@@ -184,23 +237,38 @@ forge test --match-test test_p2pMatch_success -vvvv
 forge test --gas-report
 ```
 
-### Test Coverage
+### Test Architecture
 
-- ✅ Admin functions (add/remove bot, set admin)
-- ✅ Order posting and cancellation
-- ✅ P2P matching with exact amounts
-- ✅ No match scenarios (same direction, insufficient amount)
-- ✅ Expired order handling
-- ✅ Whitelist enforcement
-- ✅ Event emissions
-- ✅ Balance transfers
+Tests use a **MockPoolManager contract** (not an EOA) that:
+- Tracks `take()`, `sync()`, and `settle()` calls
+- Performs real ERC20 token transfers
+- Allows full settlement verification in unit tests
+
+This means our tests verify the **complete P2P settlement flow**:
+- ✅ Token balances change correctly (maker receives, escrow drains)
+- ✅ PM receives escrowed tokens via `settle()`
+- ✅ PM sends input tokens to maker via `take()`
+- ✅ BeforeSwapDelta values are correct (specified + unspecified)
+
+### Test Coverage (27 tests)
+
+| Category | Tests | What's Verified |
+|----------|-------|-----------------|
+| **Admin** | 6 | addBot, removeBot, setAdmin, events, access control |
+| **Order Posting** | 5 | Success, escrow transfer, events, zero-amount/duration reverts |
+| **Order Cancellation** | 4 | Success, refund, events, unauthorized, double-cancel |
+| **P2P Matching** | 6 | Full settlement (both directions), token balances, multi-order, skip-filled |
+| **No Match** | 3 | Same direction, insufficient amount, expired orders |
+| **View Functions** | 1 | getPoolOrders |
+| **afterSwap** | 1 | No-op verification |
+| **Access Control** | 1 | Non-PM caller revert |
 
 ## Contract Addresses
 
 ### Base Sepolia (Testnet) — Latest Deployment
 
 | Contract | Address |
-|----------|---------|
+|----------|---------| 
 | PoolManager (v4) | [`0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408`](https://sepolia.basescan.org/address/0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408) |
 | PoolSwapTest | [`0x8B5bcC363ddE2614281aD875bad385E0A785D3B9`](https://sepolia.basescan.org/address/0x8B5bcC363ddE2614281aD875bad385E0A785D3B9) |
 | PoolModifyLiquidityTest | [`0x37429cD17Cb1454C34E7F50b09725202Fd533039`](https://sepolia.basescan.org/address/0x37429cD17Cb1454C34E7F50b09725202Fd533039) |
@@ -258,7 +326,7 @@ poolSwapTest.swap(
     ""
 );
 
-// Result: Bot A and Bot B traded CLAW<>ZUG directly, pool liquidity not touched ✨
+// Result: Bot A and Bot B traded CLAW<>ZUG directly, pool liquidity not touched
 ```
 
 ### 4. Cancel Order (Optional)
@@ -276,6 +344,7 @@ hook.cancelOrder(orderId, poolKey);
 - **Maker Authorization**: Only maker can cancel their order
 - **Amount Validation**: Ensures maker's minAmountOut is satisfied
 - **Direction Validation**: Only matches opposite-direction orders
+- **CEI Pattern**: State changes before external calls (order.active = false before transfers)
 
 ## Gas Optimization Notes
 
@@ -288,7 +357,7 @@ hook.cancelOrder(orderId, poolKey);
 
 - [ ] Partial order fills
 - [ ] Order expiry cleanup mechanism
-- [ ] Price limit orders (not just minAmountOut)
+- [ ] Best-price order selection (not first-match)
 - [ ] Multi-pool order matching
 - [ ] Order priority/FIFO queue
 - [ ] Gas rebates for P2P trades
@@ -300,7 +369,7 @@ hook.cancelOrder(orderId, poolKey);
 forge build
 
 # Test
-forge test
+forge test -vvv
 
 # Format
 forge fmt

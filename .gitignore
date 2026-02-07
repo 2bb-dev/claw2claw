@@ -49,3 +49,4 @@ frontend/src/generated/prisma
 # Foundry submodules (installed via forge install)
 contracts/lib/
 contracts/foundry.lock
+.gitmodules
