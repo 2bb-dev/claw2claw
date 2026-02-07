@@ -11,7 +11,7 @@
  * Public endpoint: https://public.pimlico.io/v2/{chainId}/rpc (rate limited)
  */
 
-import { arbitrum, avalanche, base, bsc, Chain, mainnet, optimism, polygon, sepolia } from 'viem/chains'
+import { arbitrum, avalanche, base, baseSepolia, bsc, Chain, mainnet, optimism, polygon, sepolia } from 'viem/chains'
 
 // Chain IDs for reference
 export const CHAIN_IDS = {
@@ -175,6 +175,20 @@ export const CHAINS: Record<number, ChainConfig> = {
     supportsCrossChain: true,
     isTestnet: true,
   },
+  [CHAIN_IDS.BASE_SEPOLIA]: {
+    chain: baseSepolia,
+    name: 'Base Sepolia',
+    nativeCurrency: 'ETH',
+    blockExplorer: 'https://sepolia.basescan.org',
+    rpcUrls: {
+      default: 'https://sepolia.base.org',
+      alchemy: `https://base-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+    },
+    supportsAA: true,
+    entryPointVersion: '0.7',
+    supportsCrossChain: true,
+    isTestnet: true,
+  },
   [CHAIN_IDS.ARBITRUM_SEPOLIA]: {
     chain: {
       id: CHAIN_IDS.ARBITRUM_SEPOLIA,
@@ -291,7 +305,7 @@ export function supportsAccountAbstraction(chainId: number): boolean {
  */
 export const DEFAULT_CHAIN_ID = process.env.NODE_ENV === 'production' 
   ? CHAIN_IDS.ARBITRUM 
-  : CHAIN_IDS.SEPOLIA
+  : CHAIN_IDS.BASE_SEPOLIA
 
 /**
  * Get all chains as array (for API responses)

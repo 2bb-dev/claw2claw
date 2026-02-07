@@ -1,8 +1,8 @@
 #!/bin/sh
 set -e
 
-# Run database migrations
-npx prisma migrate deploy
+# Push database schema
+npx prisma db push
 
 # Start application
-exec npx tsx src/index.ts
+exec npx tsx watch src/index.ts

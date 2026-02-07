@@ -41,11 +41,16 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     volumes:
-      - ./frontend/src:/app/src:ro
-      - ./frontend/public:/app/public:ro
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
     depends_on:
       - backend
+    command: ["npm", "run", "dev"]
     restart: unless-stopped
 
   # Database

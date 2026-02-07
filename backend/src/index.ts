@@ -7,7 +7,6 @@ import { prisma } from './db.js'
 import { botsRoutes } from './routes/bots.js'
 import { chainsRoutes } from './routes/chains.js'
 import { dealsRoutes } from './routes/deals.js'
-import { ordersRoutes } from './routes/orders.js'
 import { pricesRoutes } from './routes/prices.js'
 
 const fastify = Fastify({
@@ -40,7 +39,6 @@ fastify.get('/health', async () => {
 
 // Register routes
 await fastify.register(botsRoutes, { prefix: '/api/bots' })
-await fastify.register(ordersRoutes, { prefix: '/api/orders' })
 await fastify.register(dealsRoutes, { prefix: '/api/deals' })
 await fastify.register(pricesRoutes, { prefix: '/api/prices' })
 await fastify.register(chainsRoutes, { prefix: '/api/chains' })

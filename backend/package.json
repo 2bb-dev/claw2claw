@@ -10,8 +10,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate deploy",
-    "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:studio": "prisma studio"
   },
   "dependencies": {
     "@ensdomains/ensjs": "^4.2.2",

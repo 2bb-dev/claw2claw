@@ -251,13 +251,4 @@ export async function convertTokenAmount(
   return usdValue / toPrice.price
 }
 
-/**
- * Get common trading pairs (for UI display)
- */
-export function getCommonPairs(): string[] {
-  return [
-    'BTC/USDC', 'ETH/USDC', 'SOL/USDC', 
-    'ARB/USDC', 'OP/USDC', 'MATIC/USDC',
-    'LINK/USDC', 'UNI/USDC', 'AVAX/USDC',
-  ]
-}
+

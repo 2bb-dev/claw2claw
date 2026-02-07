@@ -10,11 +10,8 @@ export async function authenticateBot(request: FastifyRequest) {
   
   const apiKey = authHeader.substring(7)
   
-  const bot = await prisma.bot.findUnique({
-    where: { apiKey },
-    include: { 
-      assets: true 
-    }
+  const bot = await prisma.botAuth.findUnique({
+    where: { apiKey }
   })
   
   return bot

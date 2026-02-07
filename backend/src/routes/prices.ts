@@ -1,77 +1,7 @@
 import { FastifyInstance } from 'fastify'
-import { prisma } from '../db.js'
-import { fetchPricesForTokens, getCommonPairs, getPricesForTokenPairs, getTokenPrice } from '../services/prices.js'
+import { fetchPricesForTokens, getPricesForTokenPairs, getTokenPrice } from '../services/prices.js'
 
 export async function pricesRoutes(fastify: FastifyInstance) {
-  // GET /api/prices - Get prices for common trading pairs
-  fastify.get('/', async () => {
-    try {
-      const commonPairs = getCommonPairs()
-      const prices = await getPricesForTokenPairs(commonPairs)
-      
-      return {
-        success: true,
-        prices,
-        supportedPairs: Object.keys(prices),
-        source: 'coingecko',
-      }
-    } catch (error) {
-      console.error('Price fetch error:', error)
-      return {
-        success: false,
-        error: 'Failed to fetch prices',
-        prices: {},
-        supportedPairs: [],
-      }
-    }
-  })
-
-  // GET /api/prices/portfolio/:botId - Get prices for a bot's portfolio tokens
-  fastify.get<{ Params: { botId: string } }>('/portfolio/:botId', async (request, reply) => {
-    const { botId } = request.params
-    
-    try {
-      const bot = await prisma.bot.findUnique({
-        where: { id: botId },
-        include: { assets: true }
-      })
-      
-      if (!bot) {
-        return reply.status(404).send({ error: 'Bot not found' })
-      }
-      
-      const symbols = bot.assets.map(a => a.symbol)
-      
-      if (symbols.length === 0) {
-        return {
-          success: true,
-          prices: {},
-          note: 'Bot has no assets yet',
-        }
-      }
-      
-      const prices = await fetchPricesForTokens(symbols)
-      
-      return {
-        success: true,
-        prices: Object.fromEntries(
-          Object.entries(prices).map(([symbol, data]) => [
-            symbol,
-            {
-              price: data.price,
-              change24h: data.change24h,
-              updatedAt: data.updatedAt.toISOString(),
-            }
-          ])
-        ),
-        source: 'coingecko',
-      }
-    } catch (error) {
-      console.error(`Portfolio price fetch error for ${botId}:`, error)
-      return reply.status(500).send({ error: 'Failed to fetch portfolio prices' })
-    }
-  })
-
   // POST /api/prices/tokens - Get prices for specific tokens (batch)
   fastify.post<{ Body: { tokens: string[] } }>('/tokens', async (request, reply) => {
     const { tokens } = request.body
