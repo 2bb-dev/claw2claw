@@ -6,14 +6,16 @@ import { useEffect, useState } from 'react'
 
 interface Deal {
   id: string
-  type: 'buy' | 'sell'
-  tokenPair: string
-  price: number
-  amount: number
-  total: number
-  maker: { id: string; name: string; ensName?: string }
-  taker: { id: string; name: string; ensName?: string }
-  executedAt: string
+  txHash?: string
+  regime?: string
+  chainId?: number
+  fromToken: string
+  toToken: string
+  fromAmount: string
+  toAmount: string
+  botAddress: string
+  status: string
+  createdAt: string
 }
 
 export function DealsList() {
@@ -46,9 +48,9 @@ export function DealsList() {
     return `${hours}h ago`
   }
 
-  function truncateId(id: string) {
-    if (id.length <= 12) return id
-    return `${id.slice(0, 8)}...${id.slice(-4)}`
+  function truncateAddress(addr: string) {
+    if (addr.length <= 12) return addr
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
 
   return (
@@ -74,52 +76,42 @@ export function DealsList() {
               className="block px-4 py-3 hover:bg-muted/30 transition-colors"
             >
               <div className="flex items-center justify-between">
-                {/* Left: Deal ID & Time */}
+                {/* Left: Status & Time */}
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded bg-green-500/20 flex items-center justify-center text-xs font-bold text-green-500">
-                    ✓
+                  <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-bold ${
+                    deal.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
+                  }`}>
+                    {deal.status === 'completed' ? '✓' : '⏳'}
                   </div>
                   <div>
                     <div className="font-mono text-primary text-sm">
-                      {truncateId(deal.id)}
+                      {deal.txHash && !deal.txHash.startsWith('pending-')
+                        ? truncateAddress(deal.txHash)
+                        : `#${deal.id.slice(0, 8)}`}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {timeAgo(deal.executedAt)}
+                      {timeAgo(deal.createdAt)}
                     </div>
                   </div>
                 </div>
 
-                {/* Middle: From → To */}
+                {/* Middle: Swap info */}
                 <div className="hidden md:block w-44 text-sm">
-                  <div className="flex">
-                    <span className="text-muted-foreground w-12">From</span>
-                    <Link
-                      href={`/wallet/${deal.maker.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-primary truncate hover:underline"
-                    >
-                      {deal.maker.ensName || deal.maker.name}
-                    </Link>
+                  <div className="text-foreground">
+                    {deal.fromToken} → {deal.toToken}
                   </div>
-                  <div className="flex">
-                    <span className="text-muted-foreground w-12">To</span>
-                    <Link
-                      href={`/wallet/${deal.taker.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-chart-2 truncate hover:underline"
-                    >
-                      {deal.taker.ensName || deal.taker.name}
-                    </Link>
+                  <div className="text-xs text-muted-foreground">
+                    Bot {truncateAddress(deal.botAddress)}
                   </div>
                 </div>
 
                 {/* Right: Amount */}
                 <div className="text-right">
                   <div className="font-mono text-sm">
-                    {deal.amount} {deal.tokenPair.split('/')[0]}
+                    {deal.fromAmount} {deal.fromToken}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    ${deal.total.toLocaleString()}
+                    → {deal.toAmount} {deal.toToken}
                   </div>
                 </div>
               </div>

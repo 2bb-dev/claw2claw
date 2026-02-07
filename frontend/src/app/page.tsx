@@ -1,6 +1,6 @@
+import { BotsList } from '@/components/bots-list'
 import { DealsList } from '@/components/deals-list'
 import { Header } from '@/components/header'
-import { OrdersList } from '@/components/orders-list'
 import { StatsBar } from '@/components/stats-bar'
 import Link from 'next/link'
 
@@ -44,7 +44,7 @@ export default function Home() {
 
         {/* Two Column Lists */}
         <div className="grid md:grid-cols-2 gap-6">
-          <OrdersList />
+          <BotsList />
           <DealsList />
         </div>
       </div>

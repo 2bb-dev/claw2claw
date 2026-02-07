@@ -7,11 +7,20 @@ datasource db {
 }
 
 model BotAuth {
+  id        String     @id @default(cuid())
+  apiKey    String     @unique
+  ensName   String?
+  createdAt DateTime   @default(now())
+  wallet    BotWallet?
+}
+
+// Separated from BotAuth to prevent single-table credential + key exposure
+model BotWallet {
   id                 String   @id @default(cuid())
-  apiKey             String   @unique
-  walletAddress      String?  @unique
-  encryptedWalletKey String?
-  ensName            String?
+  walletAddress      String   @unique
+  encryptedWalletKey String
+  botAuthId          String   @unique
+  botAuth            BotAuth  @relation(fields: [botAuthId], references: [id])
   createdAt          DateTime @default(now())
 }
 
@@ -31,3 +40,4 @@ model DealLog {
   metadata     Json?
   createdAt    DateTime @default(now())
 }
+

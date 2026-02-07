@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { isAddress } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
-import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
 import {
   createBotSubdomain,
   getBotProfile,
@@ -13,7 +13,7 @@ import {
   reverseResolve,
   setBotTextRecords,
 } from '../services/ens.js'
-import { isAddress } from 'viem'
+import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
 
 interface RegisterBody {
   name: string
@@ -22,6 +22,30 @@ interface RegisterBody {
 }
 
 export async function botsRoutes(fastify: FastifyInstance) {
+  // GET /api/bots - List all registered bots (public)
+  fastify.get('/', async () => {
+    const bots = await prisma.botAuth.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        ensName: true,
+        wallet: { select: { walletAddress: true } },
+        createdAt: true,
+      }
+    })
+    
+    return {
+      success: true,
+      bots: bots.map(bot => ({
+        id: bot.id,
+        ensName: bot.ensName,
+        walletAddress: bot.wallet?.walletAddress || null,
+        createdAt: bot.createdAt,
+      }))
+    }
+  })
+
   // GET /api/bots/me - Get authenticated bot's profile
   fastify.get('/me', async (request: FastifyRequest, reply: FastifyReply) => {
     const bot = await authenticateBot(request)
@@ -34,9 +58,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
     
     // Get wallet balance if configured
     let walletBalance = null
-    if (bot.walletAddress) {
+    const walletAddress = bot.wallet?.walletAddress
+    if (walletAddress) {
       try {
-        const balance = await getWalletBalance(bot.walletAddress)
+        const balance = await getWalletBalance(walletAddress)
         walletBalance = balance.toString()
       } catch {
         // Wallet balance fetch failed, continue without it
@@ -60,7 +85,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
       bot: {
         id: bot.id,
         ensName,
-        walletAddress: bot.walletAddress,
+        walletAddress: walletAddress || null,
         walletBalance,
         ensProfile,
         createdAt: bot.createdAt,
@@ -109,9 +134,16 @@ export async function botsRoutes(fastify: FastifyInstance) {
       const bot = await prisma.botAuth.create({
         data: {
           apiKey,
-          walletAddress,
-          encryptedWalletKey,
+          ...(walletAddress && encryptedWalletKey ? {
+            wallet: {
+              create: {
+                walletAddress,
+                encryptedWalletKey,
+              }
+            }
+          } : {}),
         },
+        include: { wallet: true },
       })
 
       // Determine ENS eligibility
@@ -157,7 +189,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
           id: bot.id,
           apiKey: bot.apiKey,
           ensName: null, // Will be populated async — check /api/bots/me
-          wallet: bot.walletAddress,
+          wallet: bot.wallet?.walletAddress || null,
         },
         ...(ensStatus && { ensStatus }),
         important: "SAVE YOUR API KEY! You need it for all requests.",
@@ -175,31 +207,41 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // GET /api/bots/:id/wallet - Get wallet details
+  // GET /api/bots/:id/wallet - Get wallet details (public)
   fastify.get<{ Params: { id: string } }>('/:id/wallet', async (request, reply) => {
-    const bot = await authenticateBot(request)
+    const { id } = request.params
+    
+    const bot = await prisma.botAuth.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        ensName: true,
+        wallet: { select: { walletAddress: true } },
+        createdAt: true,
+      }
+    })
     
     if (!bot) {
-      return reply.status(401).send({
-        error: 'Unauthorized. Provide valid API key in Authorization header.'
-      })
+      return reply.status(404).send({ error: 'Bot not found' })
     }
     
-    if (request.params.id !== bot.id) {
-      return reply.status(403).send({ error: 'Access denied' })
-    }
-    
-    if (!bot.walletAddress) {
+    const walletAddress = bot.wallet?.walletAddress
+    if (!walletAddress) {
       return reply.status(404).send({ error: 'No wallet configured for this bot' })
     }
     
     try {
-      const balance = await getWalletBalance(bot.walletAddress)
+      const balance = await getWalletBalance(walletAddress)
       
       return {
         success: true,
+        bot: {
+          id: bot.id,
+          ensName: bot.ensName,
+          createdAt: bot.createdAt,
+        },
         wallet: {
-          address: bot.walletAddress,
+          address: walletAddress,
           ensName: bot.ensName || null,
           balance: balance.toString(),
           balanceFormatted: `${(Number(balance) / 1e18).toFixed(6)} ETH`
