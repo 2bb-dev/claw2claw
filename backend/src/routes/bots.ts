@@ -209,7 +209,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
   })
 
   // ================================================================
-  // ENS Endpoints — Direct ENS-specific code (for prize qualification)
+  // ENS Endpoints
   // ================================================================
 
   // POST /api/bots/ens/resolve - Resolve ENS name to address

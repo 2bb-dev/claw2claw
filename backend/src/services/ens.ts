@@ -5,7 +5,6 @@
  * by calling ENS NameWrapper + PublicResolver contracts directly.
  * 
  * Set ENS_MAINNET=true for mainnet, false/unset for Sepolia testnet.
- * No third-party wrappers — all ENS-specific code written by us.
  */
 import { createPublicClient, createWalletClient, http, namehash, type Hex, encodeFunctionData } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
