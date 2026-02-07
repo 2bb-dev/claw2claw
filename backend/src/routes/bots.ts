@@ -11,7 +11,6 @@ import {
   isEnsConfigured,
   resolveEnsName,
   reverseResolve,
-  setBotAddress,
   setBotTextRecords,
 } from '../services/ens.js'
 import { isAddress } from 'viem'
@@ -111,10 +110,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
           const defaultRecords = getDefaultBotRecords(name)
           await setBotTextRecords(ensName, defaultRecords)
 
-          // Set the ETH address record so name resolves to bot wallet
-          if (walletAddress) {
-            await setBotAddress(ensName, walletAddress)
-          }
+          // Note: createBotSubdomain already sets the addr record via setAddr()
 
           console.log(`[ENS] Bot ${name} registered as ${ensName}`)
         } catch (error) {
@@ -148,7 +144,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
             name: ensName,
             txHash: ensTxHash,
             records: getDefaultBotRecords(name),
-            explorer: `https://sepolia.app.ens.domains/${ensName}`,
+            explorer: `https://${getEnsConfig().network === 'mainnet' ? '' : 'sepolia.'}app.ens.domains/${ensName}`,
           }
         }),
         important: "SAVE YOUR API KEY! You need it for all requests.",
@@ -307,6 +303,18 @@ export async function botsRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'records object is required' })
     }
 
+    // Limit record count and value sizes to prevent gas drain
+    const MAX_RECORDS = 20
+    const MAX_VALUE_LENGTH = 512
+    const entries = Object.entries(records)
+    if (entries.length > MAX_RECORDS) {
+      return reply.status(400).send({ error: `Too many records (max ${MAX_RECORDS})` })
+    }
+    const oversized = entries.filter(([, v]) => typeof v === 'string' && v.length > MAX_VALUE_LENGTH).map(([k]) => k)
+    if (oversized.length > 0) {
+      return reply.status(400).send({ error: `Record values too long (max ${MAX_VALUE_LENGTH}): ${oversized.join(', ')}` })
+    }
+
     // Only allow exact standard keys + claw2claw namespace
     const ALLOWED_STANDARD_KEYS = new Set(['description', 'avatar', 'url'])
     const invalidKeys = Object.keys(records).filter(
@@ -332,7 +340,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
         ensName,
         records,
         txHash,
-        explorer: `https://sepolia.etherscan.io/tx/${txHash}`,
+        explorer: `https://${getEnsConfig().network === 'mainnet' ? '' : 'sepolia.'}etherscan.io/tx/${txHash}`,
       }
     } catch (error) {
       console.error('ENS record update error:', error)
