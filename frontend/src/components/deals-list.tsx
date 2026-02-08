@@ -48,6 +48,7 @@ interface Deal {
   fromAmount: string
   toAmount: string
   botAddress: string
+  botEnsName?: string | null
   status: string
   createdAt: string
 }
@@ -83,9 +84,10 @@ export function DealsList({ viewMode, botAddress, botLabel }: DealsListProps) {
     return () => clearInterval(interval)
   }, [botAddress])
 
-  const filteredDeals = viewMode === 'p2p'
+  const filteredDeals = (viewMode === 'p2p'
     ? deals.filter((d) => d.regime === 'p2p')
     : deals
+  ).filter((d) => botAddress || d.status !== 'failed')
 
   function timeAgo(dateString: string) {
     const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000)
@@ -145,43 +147,43 @@ export function DealsList({ viewMode, botAddress, botLabel }: DealsListProps) {
               href={`/deals/${deal.id}`}
               className="block px-4 py-3 hover:bg-muted/30 transition-colors"
             >
-              <div className="flex items-center justify-between">
-                {/* Left: Status & Time */}
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-bold ${
-                    deal.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
-                  }`}>
-                    {deal.status === 'completed' ? '✓' : '⏳'}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-primary text-sm">
-                        {deal.txHash && !deal.txHash.startsWith('pending-')
-                          ? truncateAddress(deal.txHash)
-                          : `#${deal.id.slice(0, 8)}`}
-                      </span>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${regimeStyle(deal.regime)}`}>
-                        {regimeLabel(deal.regime)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {timeAgo(deal.createdAt)}
-                    </div>
-                  </div>
+              <div className="flex items-center gap-4">
+                {/* Status icon */}
+                <div className={`w-8 h-8 rounded flex-shrink-0 flex items-center justify-center text-xs font-bold ${
+                  deal.status === 'completed' ? 'bg-green-500/20 text-green-500' : deal.status === 'failed' ? 'bg-red-500/20 text-red-500' : 'bg-yellow-500/20 text-yellow-500'
+                }`}>
+                  {deal.status === 'completed' ? '✓' : deal.status === 'failed' ? '✗' : '⏳'}
                 </div>
 
-                {/* Middle: Swap info */}
-                <div className="hidden md:block w-44 text-sm">
-                  <div className="text-foreground">
-                    {deal.fromToken} → {deal.toToken}
+                {/* Swap pair + bot identity */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground text-sm">
+                      {deal.fromToken} → {deal.toToken}
+                    </span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${regimeStyle(deal.regime)}`}>
+                      {regimeLabel(deal.regime)}
+                    </span>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Bot {truncateAddress(deal.botAddress)}
+                    {deal.botEnsName ? (
+                      <a
+                        href={`https://sepolia.app.ens.domains/${deal.botEnsName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:underline"
+                      >
+                        {deal.botEnsName}
+                      </a>
+                    ) : (
+                      truncateAddress(deal.botAddress)
+                    )} · {timeAgo(deal.createdAt)}
                   </div>
                 </div>
 
-                {/* Right: Amount */}
-                <div className="text-right">
+                {/* Amount */}
+                <div className="text-right flex-shrink-0">
                   <div className="font-mono text-sm">
                     {formatTokenAmount(deal.fromAmount, deal.fromToken)} {deal.fromToken}
                   </div>

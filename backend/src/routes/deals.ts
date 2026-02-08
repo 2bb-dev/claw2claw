@@ -81,6 +81,18 @@ export async function dealsRoutes(fastify: FastifyInstance) {
       pendingDeals.map(d => resolvePendingStatus(d))
     )
     const statusMap = new Map(pendingDeals.map((d, i) => [d.id, resolvedStatuses[i]]))
+
+    // Resolve bot addresses to ENS names via BotWallet → BotAuth
+    const uniqueAddresses = [...new Set(deals.map(d => d.botAddress))]
+    const wallets = await prisma.botWallet.findMany({
+      where: { walletAddress: { in: uniqueAddresses } },
+      include: { botAuth: { select: { ensName: true } } },
+    })
+    const ensMap = new Map(
+      wallets
+        .filter(w => w.botAuth.ensName)
+        .map(w => [w.walletAddress, w.botAuth.ensName!])
+    )
     
     return {
       success: true,
@@ -94,6 +106,7 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         fromAmount: deal.fromAmount,
         toAmount: deal.toAmount,
         botAddress: deal.botAddress,
+        botEnsName: ensMap.get(deal.botAddress) ?? null,
         status: statusMap.get(deal.id) ?? deal.status,
         makerComment: deal.makerComment,
         takerComment: deal.takerComment,
@@ -204,6 +217,12 @@ export async function dealsRoutes(fastify: FastifyInstance) {
 
     // Resolve pending status from LI.FI
     const resolvedStatus = await resolvePendingStatus(deal)
+
+    // Resolve bot ENS name
+    const wallet = await prisma.botWallet.findUnique({
+      where: { walletAddress: deal.botAddress },
+      include: { botAuth: { select: { ensName: true } } },
+    })
     
     return {
       success: true,
@@ -217,6 +236,7 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         fromAmount: deal.fromAmount,
         toAmount: deal.toAmount,
         botAddress: deal.botAddress,
+        botEnsName: wallet?.botAuth.ensName ?? null,
         status: resolvedStatus,
         makerComment: deal.makerComment,
         takerComment: deal.takerComment,

@@ -119,7 +119,10 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
   }
 
   const explorerBase = EXPLORER_URLS[deal.chainId]
-  const chainName = CHAIN_NAMES[deal.chainId] ?? `Chain ${deal.chainId}`
+  const fromChainName = CHAIN_NAMES[deal.chainId] ?? `Chain ${deal.chainId}`
+  const toChainId = (deal.metadata?.toChain as number) || deal.chainId
+  const toChainName = CHAIN_NAMES[toChainId] ?? `Chain ${toChainId}`
+  const isCrossChain = deal.chainId !== toChainId
   const txUrl = explorerBase ? `${explorerBase}/tx/${deal.txHash}` : null
   const addressUrl = explorerBase ? `${explorerBase}/address/${deal.botAddress}` : null
   const isPending = deal.txHash.startsWith('pending-')
@@ -153,7 +156,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
                 {regimeLabel(deal.regime)}
               </Badge>
               <Badge variant="secondary" className="text-sm px-3 py-1">
-                {chainName}
+                {isCrossChain ? `${fromChainName} → ${toChainName}` : fromChainName}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -166,6 +169,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
                   {formatTokenAmount(deal.fromAmount, deal.fromToken)}
                 </div>
                 <div className="text-lg text-primary font-semibold">{deal.fromToken}</div>
+                <div className="text-xs text-muted-foreground mt-1">{fromChainName}</div>
               </div>
               <div className="text-2xl text-muted-foreground">→</div>
               <div className="text-center">
@@ -174,45 +178,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
                   {deal.toAmount ? formatTokenAmount(deal.toAmount, deal.toToken) : '...'}
                 </div>
                 <div className="text-lg text-primary font-semibold">{deal.toToken}</div>
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-8 pt-4 border-t border-border">
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Created At</h3>
-                <p className="text-lg">{new Date(deal.createdAt).toLocaleString()}</p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Bot Address</h3>
-                {addressUrl ? (
-                  <a
-                    href={addressUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-primary hover:underline"
-                  >
-                    {truncateAddress(deal.botAddress)}
-                  </a>
-                ) : (
-                  <p className="font-mono">{truncateAddress(deal.botAddress)}</p>
-                )}
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-muted-foreground mb-2">Transaction</h3>
-                {isPending ? (
-                  <p className="font-mono text-yellow-400">Pending...</p>
-                ) : txUrl ? (
-                  <a
-                    href={txUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-primary hover:underline"
-                  >
-                    {truncateAddress(deal.txHash)}
-                  </a>
-                ) : (
-                  <p className="font-mono">{truncateAddress(deal.txHash)}</p>
-                )}
+                <div className="text-xs text-muted-foreground mt-1">{toChainName}</div>
               </div>
             </div>
           </CardContent>
@@ -220,7 +186,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
 
         {/* Bot Comments */}
         {(deal.makerComment || deal.takerComment) && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
+          <div className={`grid gap-6 mb-8 ${deal.makerComment && deal.takerComment ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
             {deal.makerComment && (
               <Card>
                 <CardHeader>
@@ -248,19 +214,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
           </div>
         )}
 
-        {/* Metadata (if present) */}
-        {deal.metadata && Object.keys(deal.metadata).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Metadata</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-sm font-mono text-muted-foreground bg-muted/30 rounded-lg p-4 overflow-x-auto">
-                {JSON.stringify(deal.metadata, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-        )}
+
       </div>
     </main>
   )

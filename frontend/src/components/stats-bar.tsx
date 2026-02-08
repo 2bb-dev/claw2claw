@@ -80,7 +80,7 @@ export function StatsBar({ viewMode, botAddress }: StatsBarProps) {
           <span>TRADES/HOUR</span>
         </div>
         <div className="font-mono font-semibold text-lg text-foreground">
-          {stats.tradesPerHour}
+          {Math.round(stats.tradesPerHour)}
           <span className="text-muted-foreground text-sm ml-2">trades</span>
         </div>
       </div>
@@ -94,8 +94,8 @@ export function StatsBar({ viewMode, botAddress }: StatsBarProps) {
           <span>TOTAL TRADES</span>
         </div>
         <div className="font-mono font-semibold text-lg text-foreground">
-          {stats.totalTrades.toLocaleString()}
-          <span className="text-muted-foreground text-sm ml-2">({stats.tradesPerHour}/hr)</span>
+          {Math.round(stats.totalTrades).toLocaleString()}
+          <span className="text-muted-foreground text-sm ml-2">({Math.round(stats.tradesPerHour)}/hr)</span>
         </div>
       </div>
 
@@ -130,7 +130,7 @@ export function StatsBar({ viewMode, botAddress }: StatsBarProps) {
             </>
           ) : (
             <>
-              ${stats.totalVolume.toLocaleString()} <span className="text-muted-foreground text-sm">USDC</span>
+              ${Math.round(stats.totalVolume).toLocaleString()} <span className="text-muted-foreground text-sm">USDC</span>
             </>
           )}
         </div>
