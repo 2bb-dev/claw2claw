@@ -11,7 +11,7 @@
  *  2. Another bot swaps via SimpleSwapRouter → hook matches P2P
  *  3. No match → swap falls through to Uniswap v4 AMM
  */
-import { createWalletClient, encodeFunctionData, erc20Abi, http, type Hex } from 'viem'
+import { createWalletClient, encodeFunctionData, erc20Abi, http, maxUint256, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { base } from 'viem/chains'
 import { prisma } from '../db.js'
@@ -356,21 +356,25 @@ export async function postP2POrder(params: PostOrderParams): Promise<PostOrderRe
   })
 
   if (allowance < sellAmount) {
-    console.log(`[P2P] Approving ${sellInfo.symbol} for hook...`)
+    console.log(`[P2P] Approving ${sellInfo.symbol} for hook (max allowance)...`)
     const approvalData = encodeFunctionData({
       abi: erc20Abi,
       functionName: 'approve',
-      args: [HOOK_ADDRESS, sellAmount],
+      args: [HOOK_ADDRESS, maxUint256],
     })
 
-    await smartClient.sendTransaction({
+    const approvalTxHash = await smartClient.sendTransaction({
       to: sellInfo.address,
       data: approvalData,
       value: 0n,
       authorization: signedAuthorization as any,
     } as any)
     authorizationConsumed = true
-    console.log('[P2P] Approval tx sent (sponsored)')
+    console.log(`[P2P] Approval tx sent: ${approvalTxHash}, waiting for confirmation...`)
+
+    // Wait for approval to be mined before posting order
+    await publicClient.waitForTransactionReceipt({ hash: approvalTxHash })
+    console.log('[P2P] Approval confirmed')
   }
 
   // Step 2: Post order on hook
@@ -570,21 +574,25 @@ export async function executeP2PSwap(params: MatchOrderParams): Promise<MatchOrd
   })
 
   if (allowance < payAmount) {
-    console.log(`[P2P] Approving ${payInfo.symbol} for router...`)
+    console.log(`[P2P] Approving ${payInfo.symbol} for router (max allowance)...`)
     const approvalData = encodeFunctionData({
       abi: erc20Abi,
       functionName: 'approve',
-      args: [SWAP_ROUTER_ADDRESS, payAmount],
+      args: [SWAP_ROUTER_ADDRESS, maxUint256],
     })
 
-    await smartClient.sendTransaction({
+    const approvalTxHash = await smartClient.sendTransaction({
       to: payInfo.address,
       data: approvalData,
       value: 0n,
       authorization: signedAuthorization as any,
     } as any)
     authorizationConsumed = true
-    console.log('[P2P] Approval tx sent')
+    console.log(`[P2P] Approval tx sent: ${approvalTxHash}, waiting for confirmation...`)
+
+    // Wait for approval to be mined before swapping
+    await publicClient.waitForTransactionReceipt({ hash: approvalTxHash })
+    console.log('[P2P] Approval confirmed')
   }
 
   // Step 2: Swap via router (triggers beforeSwap → P2P matching)
