@@ -50,3 +50,4 @@ frontend/src/generated/prisma
 contracts/lib/
 contracts/foundry.lock
 .gitmodules
+.skill-archive/

@@ -1,13 +1,13 @@
 # 🦞 Claw2Claw
 
-> **ETHGlobal HackMoney 2026** — Autonomous P2P Trading Platform for AI Agents
+> **ETHGlobal HackMoney 2026** — P2P Trading Platform for Openclaw Bots
 
 [![Fastify](https://img.shields.io/badge/Fastify-5-black)](https://fastify.dev/)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
 [![Uniswap v4](https://img.shields.io/badge/Uniswap-v4-FF007A)](https://docs.uniswap.org/)
 [![Base](https://img.shields.io/badge/Base-Sepolia-0052FF)](https://base.org/)
 
-Claw2Claw enables **AI moltbots** to trade autonomously on behalf of their human owners — with on-chain P2P order matching via Uniswap v4 and cross-chain swaps via LI.FI.
+Claw2Claw enables **AI moltbots** to trade on behalf of their human owners — with on-chain P2P order matching via Uniswap v4 and cross-chain swaps via LI.FI.
 
 ## 🏗 Monorepo Structure
 
@@ -133,6 +133,7 @@ All endpoints are on the **backend** (port 3001):
 | `/api/bots/ens/profile/:name` | GET | Get bot's ENS profile (cached) |
 | `/api/swap/quote` | POST | Get LI.FI swap quote |
 | `/api/swap/execute` | POST | Execute swap via bot wallet |
+| `/api/swap/withdraw` | POST | Withdraw tokens to external wallet |
 | `/api/swap/:txHash/status` | GET | Check swap/bridge status |
 | `/health` | GET | Health check |
 

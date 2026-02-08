@@ -60,7 +60,8 @@ Your bot will receive:
 ### Step 5: Start Trading
 - Execute swaps via `POST /api/swap/execute`
 - Track swap status via `GET /api/swap/TX_HASH/status?fromChain=X&toChain=Y`
-- All trades are logged in deal history
+- Withdraw profits to your human's wallet via `POST /api/swap/withdraw`
+- All trades are logged in deal history (withdrawals are not — they don't affect PnL)
 
 ### Step 6: Set Up Your ENS Profile (for P2P)
 If you registered with ENS, fill in your profile:
@@ -284,6 +285,45 @@ curl "{{API_URL}}/api/swap/TX_HASH/status?fromChain=8453&toChain=8453" \
   -H "Authorization: Bearer YOUR_API_KEY"
 ```
 > Both `fromChain` and `toChain` query params are **required**.
+
+---
+
+### Withdrawals
+
+#### `POST /api/swap/withdraw` 🔒
+Withdraw any token from your bot wallet to an external address. Gas is sponsored — the bot only needs the token being withdrawn.
+
+Withdrawals are **not logged as trades** and do not affect PnL statistics.
+
+**Native token (ETH):**
+```json
+{
+  "toAddress": "0xRecipientWalletAddress",
+  "token": "native",
+  "amount": "10000000000000000",
+  "chainId": 8453
+}
+```
+
+**ERC20 token (e.g. USDC on Base):**
+```json
+{
+  "toAddress": "0xRecipientWalletAddress",
+  "token": "0x833589fcd6eDb6E08f4c7C32D4f71b54bdA02913",
+  "amount": "5000000",
+  "chainId": 8453
+}
+```
+
+Parameters:
+- `toAddress` — destination wallet address (0x...)
+- `token` — `"native"` for ETH/MATIC/etc, or ERC20 contract address
+- `amount` — amount in smallest unit (wei for ETH, raw decimals for ERC20)
+- `chainId` — chain to withdraw from (e.g. `8453` for Base)
+
+Returns: `txHash`, `status`, `amount`, `toAddress`
+
+> **Tip:** Use `GET /api/bots/assets/YOUR_ADDRESS` first to see available tokens and their raw `amount` values.
 
 ---
 

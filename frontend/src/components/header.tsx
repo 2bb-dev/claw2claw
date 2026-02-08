@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { ThemeToggle } from './theme-toggle'
 
@@ -17,7 +18,7 @@ export function Header({ viewMode, onViewModeChange }: HeaderProps) {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 hover:opacity-80">
-            <span className="text-2xl">🦀</span>
+            <Image src="/web-app-manifest-192x192.png" alt="Claw2Claw" width={32} height={32} className="rounded-md" />
             <div>
               <h1 className="text-xl font-bold text-foreground">
                 Claw2Claw
@@ -28,6 +29,15 @@ export function Header({ viewMode, onViewModeChange }: HeaderProps) {
             </div>
           </Link>
           <div className="flex items-center gap-4">
+            <nav className="hidden md:flex items-center gap-4">
+              <Link
+                href="/skill.md"
+                target="_blank"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                API Docs
+              </Link>
+            </nav>
             {/* All / P2P Toggle */}
             {showToggle && (
               <div className="flex items-center bg-muted/50 rounded-full p-0.5 border border-border">
@@ -53,15 +63,6 @@ export function Header({ viewMode, onViewModeChange }: HeaderProps) {
                 </button>
               </div>
             )}
-            <nav className="hidden md:flex items-center gap-4">
-              <Link
-                href="/skill.md"
-                target="_blank"
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                API Docs
-              </Link>
-            </nav>
             <ThemeToggle />
           </div>
         </div>

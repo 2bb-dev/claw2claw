@@ -7,11 +7,11 @@
  * - Send tx via Pimlico-sponsored smartAccountClient (gasless)
  */
 import {
-    createConfig,
-    getQuote,
-    getStatus,
-    type ChainId as LiFiChainId,
-    type QuoteRequest,
+  createConfig,
+  getQuote,
+  getStatus,
+  type ChainId as LiFiChainId,
+  type QuoteRequest,
 } from '@lifi/sdk'
 import crypto from 'crypto'
 import { encodeFunctionData, erc20Abi, zeroAddress, type Hex } from 'viem'
@@ -310,3 +310,79 @@ export async function getSwapStatus(txHash: string, fromChain: number, toChain: 
     }
   })
 }
+
+// ── Withdraw API ──
+
+export interface WithdrawParams {
+  toAddress: string
+  token: string        // token contract address, or "native" for chain's native token
+  amount: string       // amount in smallest unit (wei for ETH, raw decimals for ERC20)
+  chainId: number
+  encryptedPrivateKey: string
+  botAddress: string
+}
+
+export interface WithdrawResult {
+  txHash: string
+  status: string
+  amount: string
+  toAddress: string
+}
+
+/**
+ * Withdraw native token or ERC20 from the bot's AA wallet to an external address.
+ *
+ * Uses the same Pimlico-sponsored smartAccountClient as swaps — the bot
+ * doesn't need ETH for gas, only the token being withdrawn.
+ *
+ * NOTE: Withdrawals are NOT logged to dealLog — they are not trades and
+ * should not affect PnL statistics.
+ */
+export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawResult> {
+  const account = getBotAccount(params.encryptedPrivateKey)
+  const isNativeToken = params.token.toLowerCase() === 'native' || params.token === zeroAddress
+
+  // Create sponsored smart account client (Pimlico pays gas)
+  const { client: smartClient, signedAuthorization } = await createSponsoredClient(params.encryptedPrivateKey, params.chainId)
+
+  console.log(`[executeWithdraw] From: ${account.address}`)
+  console.log(`[executeWithdraw] To: ${params.toAddress}`)
+  console.log(`[executeWithdraw] Token: ${isNativeToken ? 'native' : params.token}`)
+  console.log(`[executeWithdraw] Amount: ${params.amount}`)
+
+  let txHash: string
+
+  if (isNativeToken) {
+    // Native token transfer (ETH, MATIC, AVAX, etc.)
+    txHash = await smartClient.sendTransaction({
+      to: params.toAddress as Hex,
+      value: BigInt(params.amount),
+      data: '0x' as Hex,
+      authorization: signedAuthorization,
+    } as any)
+  } else {
+    // ERC20 token transfer
+    const transferData = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: 'transfer',
+      args: [params.toAddress as Hex, BigInt(params.amount)],
+    })
+
+    txHash = await smartClient.sendTransaction({
+      to: params.token as Hex,
+      data: transferData,
+      value: 0n,
+      authorization: signedAuthorization,
+    } as any)
+  }
+
+  console.log(`[executeWithdraw] tx hash: ${txHash}`)
+
+  return {
+    txHash,
+    status: 'completed',
+    amount: params.amount,
+    toAddress: params.toAddress,
+  }
+}
+

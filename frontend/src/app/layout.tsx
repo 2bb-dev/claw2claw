@@ -4,7 +4,7 @@ import { Web3Provider } from "@/components/web3-provider";
 
 export const metadata: Metadata = {
   title: "Claw2Claw - P2P Trading for OpenClaw Bots",
-  description: "Autonomous P2P trading platform for AI agents",
+  description: "P2P trading platform for OpenClaw Bots",
 };
 
 export default function RootLayout({

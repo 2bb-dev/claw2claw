@@ -3,6 +3,51 @@ import { FastifyInstance } from 'fastify'
 import { formatUnits } from 'viem'
 import { prisma } from '../db.js'
 import { cached } from '../services/cache.js'
+import { getSwapStatus } from '../services/lifi.js'
+
+/**
+ * Check LI.FI status for a pending deal and update the DB if terminal.
+ * Returns the resolved status string.
+ */
+async function resolvePendingStatus(deal: {
+  id: string
+  txHash: string
+  status: string
+  metadata: unknown
+}): Promise<string> {
+  // Only resolve pending deals with real txHashes
+  if (deal.status !== 'pending' || deal.txHash.startsWith('pending-')) {
+    return deal.status
+  }
+
+  try {
+    const meta = (deal.metadata as Record<string, unknown>) ?? {}
+    const fromChain = (meta.fromChain as number) || 0
+    const toChain = (meta.toChain as number) || fromChain
+
+    if (!fromChain) return deal.status
+
+    const result = await getSwapStatus(deal.txHash, fromChain, toChain)
+
+    if (result.status === 'DONE') {
+      await prisma.dealLog.update({
+        where: { id: deal.id },
+        data: { status: 'completed' },
+      })
+      return 'completed'
+    } else if (result.status === 'FAILED') {
+      await prisma.dealLog.update({
+        where: { id: deal.id },
+        data: { status: 'failed' },
+      })
+      return 'failed'
+    }
+  } catch (error) {
+    console.error(`[resolvePendingStatus] Error checking deal ${deal.id}:`, error)
+  }
+
+  return deal.status
+}
 
 // Known token decimals (fallback to 18)
 const TOKEN_DECIMALS: Record<string, number> = {
@@ -29,6 +74,13 @@ export async function dealsRoutes(fastify: FastifyInstance) {
       take: 100,
       ...(botAddress && { where: { botAddress } }),
     })
+
+    // Resolve pending deals' statuses in parallel
+    const pendingDeals = deals.filter(d => d.status === 'pending' && !d.txHash.startsWith('pending-'))
+    const resolvedStatuses = await Promise.all(
+      pendingDeals.map(d => resolvePendingStatus(d))
+    )
+    const statusMap = new Map(pendingDeals.map((d, i) => [d.id, resolvedStatuses[i]]))
     
     return {
       success: true,
@@ -42,7 +94,7 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         fromAmount: deal.fromAmount,
         toAmount: deal.toAmount,
         botAddress: deal.botAddress,
-        status: deal.status,
+        status: statusMap.get(deal.id) ?? deal.status,
         makerComment: deal.makerComment,
         takerComment: deal.takerComment,
         createdAt: deal.createdAt,
@@ -149,6 +201,9 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     if (!deal) {
       return reply.status(404).send({ error: 'Deal not found' })
     }
+
+    // Resolve pending status from LI.FI
+    const resolvedStatus = await resolvePendingStatus(deal)
     
     return {
       success: true,
@@ -162,7 +217,7 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         fromAmount: deal.fromAmount,
         toAmount: deal.toAmount,
         botAddress: deal.botAddress,
-        status: deal.status,
+        status: resolvedStatus,
         makerComment: deal.makerComment,
         takerComment: deal.takerComment,
         metadata: deal.metadata,
