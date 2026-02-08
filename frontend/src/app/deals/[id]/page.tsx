@@ -139,7 +139,6 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Deal Details</h1>
-            <p className="text-muted-foreground font-mono text-sm">{deal.id}</p>
           </div>
         </div>
       </header>
@@ -181,6 +180,44 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
                 <div className="text-xs text-muted-foreground mt-1">{toChainName}</div>
               </div>
             </div>
+
+            {/* Metadata row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-border">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Created At</div>
+                <div className="text-sm font-mono">{new Date(deal.createdAt).toLocaleString()}</div>
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Bot Address</div>
+                {addressUrl ? (
+                  <a
+                    href={addressUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-sm text-primary hover:underline"
+                  >
+                    {truncateAddress(deal.botAddress)}
+                  </a>
+                ) : (
+                  <p className="font-mono text-sm">{truncateAddress(deal.botAddress)}</p>
+                )}
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Transaction</div>
+                {!isPending && txUrl ? (
+                  <a
+                    href={txUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-sm text-primary hover:underline"
+                  >
+                    {truncateAddress(deal.txHash)}
+                  </a>
+                ) : (
+                  <p className="font-mono text-sm">{isPending ? 'Pending...' : truncateAddress(deal.txHash)}</p>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -191,7 +228,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <span>📤</span> Maker Reasoning
+                    Maker Reasoning
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -203,7 +240,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <span>📥</span> Taker Reasoning
+                    Taker Reasoning
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
