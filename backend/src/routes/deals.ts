@@ -1,9 +1,12 @@
 import { getToken, type ChainId as LiFiChainId } from '@lifi/sdk'
 import { FastifyInstance } from 'fastify'
-import { formatUnits } from 'viem'
+import { formatUnits, type Hex } from 'viem'
+import { CHAIN_IDS } from '../config/chains.js'
 import { prisma } from '../db.js'
 import { cached } from '../services/cache.js'
 import { getSwapStatus } from '../services/lifi.js'
+import { resolveToken } from '../services/p2p.js'
+import { createBlockchainClient } from '../services/wallet.js'
 
 /**
  * Check LI.FI status for a pending deal and update the DB if terminal.
@@ -49,6 +52,54 @@ async function resolvePendingStatus(deal: {
   return deal.status
 }
 
+/**
+ * For completed P2P deals missing toAmount, fetch the tx receipt from
+ * the blockchain, parse ERC20 Transfer logs, and backfill the DB.
+ */
+async function resolveP2PToAmount(deal: {
+  id: string
+  txHash: string
+  toToken: string
+  botAddress: string
+  toAmount: string | null
+  regime: string
+  status: string
+}): Promise<string | null> {
+  if (deal.toAmount) return deal.toAmount
+  if (!deal.regime.startsWith('p2p') || deal.status !== 'completed') return null
+  if (deal.txHash.startsWith('pending-')) return null
+
+  try {
+    const tokenInfo = resolveToken(deal.toToken)
+    const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
+    const receipt = await publicClient.getTransactionReceipt({ hash: deal.txHash as Hex })
+
+    const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+    const botAddrPadded = `0x${deal.botAddress.toLowerCase().replace('0x', '').padStart(64, '0')}`
+
+    for (const log of receipt.logs) {
+      if (
+        log.address.toLowerCase() === tokenInfo.address.toLowerCase() &&
+        log.topics[0] === TRANSFER_TOPIC &&
+        log.topics[2]?.toLowerCase() === botAddrPadded
+      ) {
+        const amount = BigInt(log.data).toString()
+        // Backfill DB so we don't need to fetch again
+        await prisma.dealLog.update({
+          where: { id: deal.id },
+          data: { toAmount: amount },
+        })
+        console.log(`[deals] Backfilled toAmount for deal ${deal.id}: ${amount}`)
+        return amount
+      }
+    }
+  } catch (err) {
+    console.error(`[deals] Failed to resolve toAmount for deal ${deal.id}:`, err)
+  }
+
+  return null
+}
+
 // Known token decimals (fallback to 18)
 const TOKEN_DECIMALS: Record<string, number> = {
   ETH: 18, WETH: 18, USDC: 6, USDT: 6, DAI: 18,
@@ -78,8 +129,8 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     // Exclude pending P2P posts — they show as open orders, not deals
     const filteredDeals = deals.filter(d => !(d.regime === 'p2p-post' && d.status === 'pending'))
 
-    // Resolve pending deals' statuses in parallel
-    const pendingDeals = filteredDeals.filter(d => d.status === 'pending' && !d.txHash.startsWith('pending-'))
+    // Resolve pending deals' statuses in parallel (skip P2P — they aren't LI.FI txs)
+    const pendingDeals = filteredDeals.filter(d => d.status === 'pending' && !d.txHash.startsWith('pending-') && !d.regime?.startsWith('p2p'))
     const resolvedStatuses = await Promise.all(
       pendingDeals.map(d => resolvePendingStatus(d))
     )
@@ -97,9 +148,17 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         .map(w => [w.walletAddress, w.botAuth.ensName!])
     )
     
+    // Resolve missing toAmounts for completed P2P deals
+    const toAmountPromises = filteredDeals.map(deal =>
+      !deal.toAmount && deal.regime.startsWith('p2p') && deal.status === 'completed'
+        ? resolveP2PToAmount(deal)
+        : Promise.resolve(deal.toAmount)
+    )
+    const resolvedToAmounts = await Promise.all(toAmountPromises)
+
     return {
       success: true,
-      deals: filteredDeals.map(deal => {
+      deals: filteredDeals.map((deal, i) => {
         const meta = (deal.metadata as Record<string, unknown>) ?? {}
         return {
           id: deal.id,
@@ -109,7 +168,7 @@ export async function dealsRoutes(fastify: FastifyInstance) {
           fromToken: deal.fromToken,
           toToken: deal.toToken,
           fromAmount: deal.fromAmount,
-          toAmount: deal.toAmount ?? (meta.minBuyAmount as string) ?? null,
+          toAmount: resolvedToAmounts[i] ?? deal.toAmount ?? (meta.minBuyAmount as string) ?? null,
           fromTokenDecimals: (meta.fromTokenDecimals as number) ?? TOKEN_DECIMALS[deal.fromToken.toUpperCase()] ?? 18,
           toTokenDecimals: (meta.toTokenDecimals as number) ?? TOKEN_DECIMALS[deal.toToken.toUpperCase()] ?? 18,
           botAddress: deal.botAddress,
@@ -233,6 +292,10 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     })
     
     const meta = (deal.metadata as Record<string, unknown>) ?? {}
+
+    // Resolve missing toAmount for completed P2P deals from blockchain
+    const resolvedToAmount = await resolveP2PToAmount(deal)
+
     return {
       success: true,
       deal: {
@@ -243,7 +306,7 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         fromToken: deal.fromToken,
         toToken: deal.toToken,
         fromAmount: deal.fromAmount,
-        toAmount: deal.toAmount ?? (meta.minBuyAmount as string) ?? null,
+        toAmount: resolvedToAmount ?? deal.toAmount ?? (meta.minBuyAmount as string) ?? null,
         fromTokenDecimals: (meta.fromTokenDecimals as number) ?? TOKEN_DECIMALS[deal.fromToken.toUpperCase()] ?? 18,
         toTokenDecimals: (meta.toTokenDecimals as number) ?? TOKEN_DECIMALS[deal.toToken.toUpperCase()] ?? 18,
         botAddress: deal.botAddress,

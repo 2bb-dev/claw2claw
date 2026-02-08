@@ -628,6 +628,30 @@ export async function executeP2PSwap(params: MatchOrderParams): Promise<MatchOrd
   const txHash = await smartClient.sendTransaction(txParams)
   console.log(`[P2P] Swap executed, tx: ${txHash}`)
 
+  // Wait for receipt and extract actual output amount from ERC20 Transfer events
+  let actualToAmount: string | null = null
+  try {
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
+    // ERC20 Transfer event: Transfer(address from, address to, uint256 value)
+    const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+    const botAddrLower = params.botAddress.toLowerCase().replace('0x', '').padStart(64, '0')
+
+    for (const log of receipt.logs) {
+      // Match: Transfer of receiveToken TO the bot address
+      if (
+        log.address.toLowerCase() === receiveInfo.address.toLowerCase() &&
+        log.topics[0] === TRANSFER_TOPIC &&
+        log.topics[2]?.toLowerCase() === `0x${botAddrLower}`
+      ) {
+        actualToAmount = BigInt(log.data).toString()
+        console.log(`[P2P] Extracted toAmount from receipt: ${actualToAmount} ${receiveInfo.symbol}`)
+        break
+      }
+    }
+  } catch (err) {
+    console.error('[P2P] Failed to extract toAmount from receipt:', err)
+  }
+
   // Log deal
   const dealLog = await prisma.dealLog.create({
     data: {
@@ -637,7 +661,7 @@ export async function executeP2PSwap(params: MatchOrderParams): Promise<MatchOrd
       fromToken: payInfo.symbol,
       toToken: receiveInfo.symbol,
       fromAmount: params.payAmount,
-      toAmount: null, // filled by hook, check on-chain
+      toAmount: actualToAmount,
       botAddress: params.botAddress,
       status: 'completed',
       takerComment: params.comment ?? null,
@@ -740,6 +764,44 @@ export async function getActiveOrders(tokenA?: string, tokenB?: string): Promise
   }
 
   return orders
+}
+
+/**
+ * Read active orders from ALL known token pool pairs.
+ * Iterates every unique pair, calls getPoolOrders for each,
+ * and merges the results — so orders on DEGEN/USDC, WETH/DAI etc. all show up.
+ */
+export async function getAllActiveOrders(): Promise<OnChainOrder[]> {
+  const symbols = Object.keys(KNOWN_TOKENS)
+  const allOrders: OnChainOrder[] = []
+  const seenOrderIds = new Set<number>()
+
+  // Generate all unique pairs
+  const pairs: [string, string][] = []
+  for (let i = 0; i < symbols.length; i++) {
+    for (let j = i + 1; j < symbols.length; j++) {
+      pairs.push([symbols[i], symbols[j]])
+    }
+  }
+
+  // Query each pair in parallel
+  const results = await Promise.allSettled(
+    pairs.map(([a, b]) => getActiveOrders(a, b))
+  )
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      for (const order of result.value) {
+        if (!seenOrderIds.has(order.orderId)) {
+          seenOrderIds.add(order.orderId)
+          allOrders.push(order)
+        }
+      }
+    }
+    // Silently skip failed pools (e.g. uninitialized)
+  }
+
+  return allOrders
 }
 
 

@@ -18,6 +18,7 @@ import {
   cancelP2POrder,
   executeP2PSwap,
   getActiveOrders,
+  getAllActiveOrders,
   getKnownTokens,
   getP2PConfig,
   initializePool,
@@ -265,7 +266,10 @@ export async function ordersRoutes(fastify: FastifyInstance) {
     const { tokenA, tokenB } = request.query
 
     try {
-      const orders = await getActiveOrders(tokenA, tokenB)
+      // If specific pool requested, query that pool; otherwise query ALL pools
+      const orders = (tokenA || tokenB)
+        ? await getActiveOrders(tokenA, tokenB)
+        : await getAllActiveOrders()
 
       // Enrich with deal log IDs for linking to detail pages
 
