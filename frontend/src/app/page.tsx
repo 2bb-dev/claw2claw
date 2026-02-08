@@ -51,8 +51,7 @@ function HomeContent() {
     updateParams({ bot: address, label })
   }, [updateParams])
 
-  const showThreeColumns = viewMode === 'p2p' && !!botAddress
-  const showTwoColumns = !showThreeColumns && (viewMode === 'p2p' || !!botAddress)
+  const showTwoColumns = viewMode === 'p2p' || !!botAddress
 
   return (
     <main className="min-h-screen bg-background">
@@ -94,26 +93,14 @@ function HomeContent() {
         {/* Stats Bar */}
         <StatsBar viewMode={viewMode} botAddress={botAddress} />
 
-
-        {/* Three-column layout: P2P mode + bot lookup */}
-        {showThreeColumns ? (
-          <div className="grid md:grid-cols-3 gap-6">
-            <OrdersList botAddress={botAddress} botLabel={botLabel} />
-            <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
-            <BotAssets botAddress={botAddress} botLabel={botLabel} />
-          </div>
-        ) : showTwoColumns ? (
+        {showTwoColumns ? (
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Left column */}
-            {viewMode === 'p2p' ? (
+            {/* Left column: Orders + Assets */}
+            <div className="space-y-6">
               <OrdersList botAddress={botAddress} botLabel={botLabel} />
-            ) : (
-              <div className="space-y-6">
-                <OrdersList botAddress={botAddress} botLabel={botLabel} />
-                <BotAssets botAddress={botAddress} botLabel={botLabel} />
-              </div>
-            )}
-            {/* Right column */}
+              {botAddress && <BotAssets botAddress={botAddress} botLabel={botLabel} />}
+            </div>
+            {/* Right column: Trades */}
             <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
           </div>
         ) : (

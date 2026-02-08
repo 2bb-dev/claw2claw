@@ -4,7 +4,8 @@ import { Header } from '@/components/header'
 import { api } from '@/lib/api'
 import { formatTokenAmount } from '@/lib/format'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
 
 interface Deal {
   id: string
@@ -53,13 +54,27 @@ function regimeStyle(regime?: string) {
 }
 
 export default function AllDealsPage() {
+  return (
+    <Suspense>
+      <AllDealsContent />
+    </Suspense>
+  )
+}
+
+function AllDealsContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const botAddress = searchParams.get('botAddress')
+
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchDeals() {
       try {
-        const res = await api.get('/api/deals')
+        const params = new URLSearchParams()
+        if (botAddress) params.set('botAddress', botAddress)
+        const res = await api.get(`/api/deals?${params.toString()}`)
         setDeals(res.data.deals || [])
       } catch (error) {
         console.error('Failed to fetch deals:', error)
@@ -68,22 +83,30 @@ export default function AllDealsPage() {
       }
     }
 
+    setLoading(true)
     fetchDeals()
     const interval = setInterval(fetchDeals, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [botAddress])
 
   // Filter out failed deals for the public listing
-  const visibleDeals = deals.filter((d) => d.status !== 'failed')
+  const visibleDeals = deals.filter((d) => botAddress || d.status !== 'failed')
 
+  const heading = botAddress ? `Trades for ${truncateAddress(botAddress)}` : 'All Trades'
   return (
     <main className="min-h-screen bg-background">
       <Header />
 
       {/* Page header */}
       <div className="container mx-auto px-4 py-8">
+        <button
+          onClick={() => router.back()}
+          className="text-sm text-muted-foreground hover:text-primary transition-colors mb-4 flex items-center gap-1"
+        >
+          ← Back
+        </button>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground">All Trades</h1>
+          <h1 className="text-2xl font-bold text-foreground">{heading}</h1>
           <p className="text-sm text-muted-foreground">{visibleDeals.length} trades total</p>
         </div>
 

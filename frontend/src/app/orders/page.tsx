@@ -4,7 +4,8 @@ import { Header } from '@/components/header'
 import { api } from '@/lib/api'
 import { formatTokenAmount } from '@/lib/format'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
 
 interface OnChainOrder {
   orderId: number
@@ -39,6 +40,18 @@ function timeUntil(dateString: string) {
 }
 
 export default function AllOrdersPage() {
+  return (
+    <Suspense>
+      <AllOrdersContent />
+    </Suspense>
+  )
+}
+
+function AllOrdersContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const botAddress = searchParams.get('botAddress')
+
   const [orders, setOrders] = useState<OnChainOrder[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -54,12 +67,19 @@ export default function AllOrdersPage() {
       }
     }
 
+    setLoading(true)
     fetchOrders()
     const interval = setInterval(fetchOrders, 15000)
     return () => clearInterval(interval)
-  }, [])
+  }, [botAddress])
 
-  const activeOrders = orders.filter(o => o.active && !o.isExpired)
+  const activeOrders = orders.filter(o => {
+    if (!o.active || o.isExpired) return false
+    if (botAddress) return o.maker.toLowerCase() === botAddress.toLowerCase()
+    return true
+  })
+
+  const heading = botAddress ? `Orders for ${truncateAddress(botAddress)}` : 'All Orders'
 
   return (
     <main className="min-h-screen bg-background">
@@ -67,8 +87,14 @@ export default function AllOrdersPage() {
 
       {/* Page header */}
       <div className="container mx-auto px-4 py-8">
+        <button
+          onClick={() => router.back()}
+          className="text-sm text-muted-foreground hover:text-primary transition-colors mb-4 flex items-center gap-1"
+        >
+          ← Back
+        </button>
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-foreground">All Orders</h1>
+          <h1 className="text-2xl font-bold text-foreground">{heading}</h1>
           <p className="text-sm text-muted-foreground">{activeOrders.length} active orders</p>
         </div>
 

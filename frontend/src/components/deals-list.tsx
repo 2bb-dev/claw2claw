@@ -171,7 +171,7 @@ export function DealsList({ viewMode, botAddress, botLabel }: DealsListProps) {
       {/* Footer */}
       <div className="px-4 py-3 border-t border-border">
         <Link
-          href="/deals"
+          href={botAddress ? `/deals?botAddress=${botAddress}` : '/deals'}
           className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
         >
           VIEW ALL TRADES →
