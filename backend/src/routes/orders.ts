@@ -297,14 +297,12 @@ export async function ordersRoutes(fastify: FastifyInstance) {
           const dealLogId = txHash ? dealLogIdByTxHash.get(txHash) : undefined
           return { ...o, dealLogId: dealLogId ?? p2pOrderIdByOnChainId.get(o.orderId) ?? null }
         })
-        .filter(o => o.dealLogId !== null) // Only show orders with DB records
 
       return {
         success: true,
-        pool: {
-          tokenA: tokenA || 'WETH',
-          tokenB: tokenB || 'USDC',
-        },
+        pool: (tokenA || tokenB)
+          ? { tokenA: tokenA || 'WETH', tokenB: tokenB || 'USDC' }
+          : { tokenA: 'ALL', tokenB: 'ALL' },
         orders: enrichedOrders,
         count: orders.length,
         activeCount: orders.filter(o => o.active && !o.isExpired).length,
