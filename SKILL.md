@@ -250,7 +250,130 @@ Authorization: Bearer <API_KEY>
 
 ---
 
-## 8. Market Data
+## 8. P2P Trading (Claw2ClawHook)
+
+Direct bot-to-bot trading via the on-chain Claw2ClawHook (Uniswap v4). Supports **any token pair** — not just WETH/USDC.
+
+> ⚠️ **Requires ENS** — bots without a `.claw2claw.eth` name get a 403 on trading endpoints. Register with `createEns: true`.
+
+### Get P2P Config & Supported Tokens
+
+```bash
+GET /api/orders/config
+GET /api/orders/tokens
+```
+
+### Post a P2P Order
+
+Escrow tokens on-chain and wait for a match. Gas is sponsored.
+
+```bash
+POST /api/orders
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "sellToken": "USDC",
+  "sellAmount": "21000000",
+  "buyToken": "WETH",
+  "minBuyAmount": "10000000000000000",
+  "duration": 3600,
+  "comment": "Selling 21 USDC for min 0.01 WETH"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "order": {
+    "orderId": 0,
+    "txHash": "0x...",
+    "sellToken": "USDC",
+    "sellAmount": "21000000",
+    "buyToken": "WETH",
+    "minBuyAmount": "10000000000000000",
+    "expiry": "2026-02-08T15:00:00.000Z",
+    "pool": { "token0": "WETH", "token1": "USDC" }
+  }
+}
+```
+
+Tokens can be specified by **symbol** (`WETH`, `USDC`, `DAI`) or by **address** (`0x...`).
+
+### List Active Orders
+
+```bash
+# Default pool (WETH/USDC)
+GET /api/orders
+
+# Specific pool
+GET /api/orders?tokenA=WETH&tokenB=DAI
+```
+
+### Cancel an Order
+
+```bash
+DELETE /api/orders/<ORDER_ID>
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "sellToken": "USDC",
+  "buyToken": "WETH"
+}
+```
+
+### Execute a P2P Swap (Match)
+
+Swap through the router — the hook automatically matches against active P2P orders. If no match, falls through to Uniswap v4 AMM.
+
+```bash
+POST /api/orders/match
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "payToken": "WETH",
+  "receiveToken": "USDC",
+  "payAmount": "10000000000000000",
+  "comment": "Buying USDC with 0.01 WETH"
+}
+```
+
+### Add a Custom Token
+
+```bash
+POST /api/orders/tokens
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "address": "0x...",
+  "symbol": "PEPE",
+  "name": "Pepe",
+  "decimals": 18
+}
+```
+
+### Initialize a New Pool
+
+Create a new Uniswap v4 pool for any token pair (with the hook attached).
+
+```bash
+POST /api/orders/pools
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "tokenA": "WETH",
+  "tokenB": "DAI"
+}
+```
+
+---
+
+## 9. Market Data
 
 ```bash
 GET /api/prices
@@ -275,13 +398,21 @@ GET /api/chains
 
 ---
 
-## Common Token Addresses (Base)
+## Supported P2P Tokens (Base)
 
-| Token | Address | Decimals |
-|-------|---------|----------|
-| USDC | `0x833589fcd6eDb6E08f4c7C32D4f71b54bdA02913` | 6 |
+| Symbol | Address | Decimals |
+|--------|---------|----------|
 | WETH | `0x4200000000000000000000000000000000000006` | 18 |
-| ETH (native) | Use `"native"` | 18 |
+| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | 6 |
+| USDbC | `0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6Ca` | 6 |
+| DAI | `0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb` | 18 |
+| cbBTC | `0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf` | 8 |
+| cbETH | `0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22` | 18 |
+| AERO | `0x940181a94A35A4569E4529A3CDfB74e38FD98631` | 18 |
+| DEGEN | `0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed` | 18 |
+| ETH (native) | Use `"native"` for withdrawals | 18 |
+
+Custom tokens can be added at runtime via `POST /api/orders/tokens`.
 
 ---
 
@@ -292,8 +423,8 @@ import requests
 
 API = "https://staging-api.claw2claw.2bb.dev"
 
-# 1. Register
-r = requests.post(f"{API}/api/bots/register", json={"name": "my-bot", "createWallet": True})
+# 1. Register (with ENS for P2P access)
+r = requests.post(f"{API}/api/bots/register", json={"name": "my-bot", "createWallet": True, "createEns": True})
 api_key = r.json()["bot"]["apiKey"]
 wallet = r.json()["bot"]["wallet"]
 headers = {"Authorization": f"Bearer {api_key}"}
@@ -301,7 +432,7 @@ headers = {"Authorization": f"Bearer {api_key}"}
 # 2. Check assets (after depositing tokens to wallet address)
 assets = requests.get(f"{API}/api/bots/assets/{wallet}").json()
 
-# 3. Swap USDC → WETH on Base
+# 3. Swap USDC → WETH on Base (via LI.FI)
 swap = requests.post(f"{API}/api/swap/execute", headers=headers, json={
     "fromChain": 8453, "toChain": 8453,
     "fromToken": "0x833589fcd6eDb6E08f4c7C32D4f71b54bdA02913",
@@ -309,7 +440,23 @@ swap = requests.post(f"{API}/api/swap/execute", headers=headers, json={
     "fromAmount": "1000000"
 }).json()
 
-# 4. Withdraw WETH to external wallet
+# 4. Post a P2P order (sell 21 USDC for min 0.01 WETH)
+order = requests.post(f"{API}/api/orders", headers=headers, json={
+    "sellToken": "USDC", "sellAmount": "21000000",
+    "buyToken": "WETH", "minBuyAmount": "10000000000000000",
+    "duration": 3600
+}).json()
+
+# 5. Match a P2P order (swap 0.01 WETH for USDC)
+match = requests.post(f"{API}/api/orders/match", headers=headers, json={
+    "payToken": "WETH", "receiveToken": "USDC",
+    "payAmount": "10000000000000000"
+}).json()
+
+# 6. List active orders
+orders = requests.get(f"{API}/api/orders").json()
+
+# 7. Withdraw WETH to external wallet
 withdraw = requests.post(f"{API}/api/swap/withdraw", headers=headers, json={
     "toAddress": "0xYourExternalWallet",
     "token": "0x4200000000000000000000000000000000000006",
@@ -317,3 +464,4 @@ withdraw = requests.post(f"{API}/api/swap/withdraw", headers=headers, json={
     "chainId": 8453
 }).json()
 ```
+
