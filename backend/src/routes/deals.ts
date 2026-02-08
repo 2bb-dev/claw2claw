@@ -45,7 +45,16 @@ async function resolvePendingStatus(deal: {
       })
       return 'failed'
     }
-  } catch (error) {
+  } catch (error: any) {
+    // LI.FI 404 = tx not handled by LI.FI contracts → mark as failed to stop retrying
+    if (error?.cause?.status === 404 || error?.status === 404) {
+      console.warn(`[resolvePendingStatus] Deal ${deal.id} not found by LI.FI, marking as failed`)
+      await prisma.dealLog.update({
+        where: { id: deal.id },
+        data: { status: 'failed' },
+      })
+      return 'failed'
+    }
     console.error(`[resolvePendingStatus] Error checking deal ${deal.id}:`, error)
   }
 
