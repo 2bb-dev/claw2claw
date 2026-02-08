@@ -1,5 +1,6 @@
 'use client'
 
+import { Header } from '@/components/header'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
@@ -115,21 +116,16 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <main className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border">
-        <div className="container mx-auto px-4 py-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              Order Details
-              {order.orderId != null && (
-                <span className="text-muted-foreground ml-2 text-lg font-mono">#{order.orderId}</span>
-              )}
-            </h1>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <div className="container mx-auto px-4 py-8">
+        <h1 className="text-2xl font-bold text-foreground mb-6">
+          Order Details
+          {order.orderId != null && (
+            <span className="text-muted-foreground ml-2 text-lg font-mono">#{order.orderId}</span>
+          )}
+        </h1>
+
         {/* Order Summary */}
         <Card className="mb-8">
           <CardHeader>
