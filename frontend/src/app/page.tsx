@@ -8,11 +8,19 @@ import { OrdersList } from '@/components/orders-list'
 import { StatsBar } from '@/components/stats-bar'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useCallback } from 'react'
+import { Suspense, useCallback } from 'react'
 
 export type ViewMode = 'all' | 'p2p'
 
 export default function Home() {
+  return (
+    <Suspense>
+      <HomeContent />
+    </Suspense>
+  )
+}
+
+function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
