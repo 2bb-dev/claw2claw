@@ -21,6 +21,11 @@ interface OnChainOrder {
   dealLogId?: string | null
 }
 
+interface OrdersListProps {
+  botAddress?: string | null
+  botLabel?: string | null
+}
+
 function truncateAddress(addr: string) {
   if (addr.length <= 12) return addr
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`
@@ -38,7 +43,7 @@ function timeUntil(dateString: string) {
   return `${days}d left`
 }
 
-export function OrdersList() {
+export function OrdersList({ botAddress, botLabel }: OrdersListProps) {
   const [orders, setOrders] = useState<OnChainOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -69,13 +74,21 @@ export function OrdersList() {
     return () => clearInterval(interval)
   }, [])
 
-  const activeOrders = orders.filter(o => o.active && !o.isExpired)
+  const activeOrders = orders.filter(o => {
+    if (!o.active || o.isExpired) return false
+    if (botAddress) return o.maker.toLowerCase() === botAddress.toLowerCase()
+    return true
+  })
+
+  const headerText = botLabel
+    ? `Orders for ${botLabel.includes('.') ? botLabel : truncateAddress(botLabel)}`
+    : 'Latest Orders'
 
   return (
     <div className="bg-card border border-border rounded-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-foreground">Latest Orders</h3>
+        <h3 className="font-semibold text-foreground">{headerText}</h3>
         <span className="text-xs text-muted-foreground">
           {activeOrders.length} active
         </span>
@@ -93,52 +106,46 @@ export function OrdersList() {
           </div>
         ) : (
           activeOrders.slice(0, 10).map((order) => {
-            const content = (
-              <div
-                className="px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-4">
-                  {/* Direction icon */}
-                  <div className="w-8 h-8 rounded flex-shrink-0 flex items-center justify-center text-xs font-bold bg-blue-500/20 text-blue-400">
-                    ⇄
-                  </div>
+            const href = order.dealLogId
+              ? `/orders/${order.dealLogId}`
+              : `/orders/${order.orderId}`
 
-                  {/* Pair + maker */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-foreground text-sm">
-                        {order.sellToken} → {order.buyToken}
-                      </span>
-                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-blue-500/20 text-blue-400 border-blue-500/30">
-                        P2P
-                      </span>
+            return (
+              <Link key={order.orderId} href={href}>
+                <div className="px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-4">
+                    {/* Direction icon */}
+                    <div className="w-8 h-8 rounded flex-shrink-0 flex items-center justify-center text-xs font-bold bg-blue-500/20 text-blue-400">
+                      ⇄
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {truncateAddress(order.maker)} · {timeUntil(order.expiry)}
-                    </div>
-                  </div>
 
-                  {/* Amount */}
-                  <div className="text-right flex-shrink-0">
-                    <div className="font-mono text-sm">
-                      {formatTokenAmount(order.amountIn, order.sellTokenDecimals ?? 18)} {order.sellToken}
+                    {/* Pair + maker */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-foreground text-sm">
+                          {order.sellToken} → {order.buyToken}
+                        </span>
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-blue-500/20 text-blue-400 border-blue-500/30">
+                          P2P
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {truncateAddress(order.maker)} · {timeUntil(order.expiry)}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      min {formatTokenAmount(order.minAmountOut, order.buyTokenDecimals ?? 18)} {order.buyToken}
+
+                    {/* Amount */}
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-mono text-sm">
+                        {formatTokenAmount(order.amountIn, order.sellTokenDecimals ?? 18)} {order.sellToken}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        min {formatTokenAmount(order.minAmountOut, order.buyTokenDecimals ?? 18)} {order.buyToken}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )
-
-            return order.dealLogId ? (
-              <Link key={order.orderId} href={`/orders/${order.dealLogId}`}>
-                {content}
               </Link>
-            ) : (
-              <div key={order.orderId}>
-                {content}
-              </div>
             )
           })
         )}

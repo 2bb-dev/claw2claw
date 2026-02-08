@@ -677,6 +677,8 @@ export interface OnChainOrder {
   expiry: string
   active: boolean
   isExpired: boolean
+  sellTokenDecimals: number
+  buyTokenDecimals: number
 }
 
 /**
@@ -692,6 +694,8 @@ export async function getActiveOrders(tokenA?: string, tokenB?: string): Promise
   const token1Info = TOKEN_BY_ADDRESS[poolKey.currency1.toLowerCase()]
   const token0Symbol = token0Info?.symbol || poolKey.currency0
   const token1Symbol = token1Info?.symbol || poolKey.currency1
+  const token0Decimals = token0Info?.decimals ?? 18
+  const token1Decimals = token1Info?.decimals ?? 18
 
   const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
 
@@ -730,6 +734,8 @@ export async function getActiveOrders(tokenA?: string, tokenB?: string): Promise
       expiry: new Date(Number(expiry) * 1000).toISOString(),
       active,
       isExpired,
+      sellTokenDecimals: sellToken0 ? token0Decimals : token1Decimals,
+      buyTokenDecimals: sellToken0 ? token1Decimals : token0Decimals,
     })
   }
 

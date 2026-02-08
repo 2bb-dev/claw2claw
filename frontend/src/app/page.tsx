@@ -64,10 +64,21 @@ export default function Home() {
         {/* Stats Bar */}
         <StatsBar viewMode={viewMode} botAddress={botAddress} />
 
+        {/* State trace */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
+          <span className="font-semibold text-foreground">{viewMode === 'p2p' ? 'P2P' : 'All'}</span>
+          {botLabel && (
+            <>
+              <span>›</span>
+              <span className="text-primary">{botLabel.includes('.') ? botLabel : `${botLabel.slice(0, 6)}...${botLabel.slice(-4)}`}</span>
+            </>
+          )}
+        </div>
+
         {/* Three-column layout: P2P mode + bot lookup */}
         {showThreeColumns ? (
           <div className="grid md:grid-cols-3 gap-6">
-            <OrdersList />
+            <OrdersList botAddress={botAddress} botLabel={botLabel} />
             <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
             <BotAssets botAddress={botAddress} botLabel={botLabel} />
           </div>
@@ -75,11 +86,13 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-6">
             {/* Left column */}
             {viewMode === 'p2p' ? (
-              <OrdersList />
+              <OrdersList botAddress={botAddress} botLabel={botLabel} />
             ) : (
-              <BotAssets botAddress={botAddress} botLabel={botLabel} />
+              <div className="space-y-6">
+                <OrdersList botAddress={botAddress} botLabel={botLabel} />
+                <BotAssets botAddress={botAddress} botLabel={botLabel} />
+              </div>
             )}
-
             {/* Right column */}
             <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
           </div>
