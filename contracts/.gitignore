@@ -1,0 +1,10 @@
+# Compiler output
+cache/
+out/
+broadcast/
+
+# Dotenv
+.env
+
+# Dependencies (installed via forge install)
+lib/

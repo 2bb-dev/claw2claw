@@ -13,12 +13,18 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@ensdomains/ensjs": "^4.2.2",
     "@fastify/cors": "^11.0.0",
     "@fastify/sensible": "^6.0.0",
+    "@lifi/sdk": "^3.15.5",
     "@prisma/adapter-pg": "^7.3.0",
     "@prisma/client": "^7.3.0",
     "fastify": "^5.3.0",
-    "tsx": "^4.19.2"
+    "ioredis": "^5.9.2",
+    "permissionless": "^0.3.4",
+    "pg": "^8.18.0",
+    "tsx": "^4.19.2",
+    "viem": "^2.45.1"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

@@ -6,62 +6,55 @@ datasource db {
   provider = "postgresql"
 }
 
-model Bot {
-  id          String   @id @default(cuid())
-  name        String
-  apiKey      String   @unique
-  humanOwner  String
-  ensName     String?
-  strategy    Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  orders       Order[]
-  dealsAsMaker Deal[]  @relation("maker")
-  dealsAsTaker Deal[]  @relation("taker")
-  assets       BotAsset[]
+model BotAuth {
+  id        String     @id @default(cuid())
+  apiKey    String     @unique
+  ensName   String?
+  createdAt DateTime   @default(now())
+  wallet    BotWallet?
 }
 
-model Order {
-  id        String   @id @default(cuid())
-  botId     String
-  bot       Bot      @relation(fields: [botId], references: [id])
-  type      String   // 'buy' | 'sell'
-  tokenPair String   @default("ETH/USDC")
-  price     Float
-  amount    Float
-  status    String   @default("open") // 'open' | 'filled' | 'cancelled'
-  reason    String?
-  createdAt DateTime @default(now())
-
-  deals Deal[]
+// Separated from BotAuth to prevent single-table credential + key exposure
+model BotWallet {
+  id                 String   @id @default(cuid())
+  walletAddress      String   @unique
+  encryptedWalletKey String
+  botAuthId          String   @unique
+  botAuth            BotAuth  @relation(fields: [botAuthId], references: [id])
+  createdAt          DateTime @default(now())
 }
 
-model Deal {
-  id          String   @id @default(cuid())
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id])
-  makerId     String
-  maker       Bot      @relation("maker", fields: [makerId], references: [id])
-  takerId     String
-  taker       Bot      @relation("taker", fields: [takerId], references: [id])
-  price       Float
-  amount      Float
-  makerReview String?
-  takerReview String?
-  executedAt  DateTime @default(now())
+model DealLog {
+  id           String   @id @default(uuid())
+  txHash       String   @unique
+  regime       String   // "lifi" | "p2p"
+  chainId      Int
+  fromToken    String
+  toToken      String
+  fromAmount   String
+  toAmount     String?
+  botAddress   String
+  status       String   // "pending" | "completed" | "failed"
+  makerComment String?  // bot reasoning from maker
+  takerComment String?  // bot reasoning from taker
+  metadata     Json?
+  createdAt    DateTime @default(now())
 }
 
-model BotAsset {
-  id        String   @id @default(cuid())
-  botId     String
-  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
-  symbol    String   // BTC, ETH, SOL, USDC, DOGE, etc.
-  amount    Float    // Amount of the asset
-  usdPrice  Float    // Reference price in USD at time of creation
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model P2POrder {
+  id           String   @id @default(uuid())
+  onChainId    Int      @unique    // hook's orderId
+  maker        String              // bot wallet address
+  sellToken0   Boolean             // true = selling WETH, false = selling USDC
+  amountIn     String              // raw amount escrowed in hook
+  minAmountOut String              // minimum acceptable output
+  expiry       DateTime
+  status       String   @default("active") // active | filled | cancelled | expired
+  txHash       String?             // posting tx hash
+  matchTxHash  String?             // match/fill tx hash
+  poolKey      Json                // cached pool key for reference
+  createdAt    DateTime @default(now())
 
-  @@unique([botId, symbol])
-  @@index([botId])
+  @@index([maker])
+  @@index([status])
 }

@@ -8,7 +8,7 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copy workspace files
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 COPY frontend/package.json ./frontend/
 
 # Install dependencies
@@ -26,7 +26,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build-time env var for API URL (Railway passes this as build arg)
 ARG NEXT_PUBLIC_API_URL=https://api.claw2claw.2bb.dev
+ARG NEXT_PUBLIC_SITE_URL=https://claw2claw.2bb.dev
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 
 # Build the frontend
 WORKDIR /app/frontend
@@ -44,7 +46,5 @@ COPY --from=builder /app/frontend/.next ./.next
 COPY --from=builder /app/frontend/public ./public
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/frontend/package.json ./package.json
-
-EXPOSE 3000
 
 CMD ["npm", "run", "start"]

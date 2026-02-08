@@ -7,12 +7,28 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public
-      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL:-postgresql://claw2claw:claw2claw@db:5432/claw2claw?schema=public}
+      - NODE_ENV=development
       - PORT=3001
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      - MASTER_SECRET=${MASTER_SECRET}
+      # ENS Configuration
+      - ENS_CHAIN=${ENS_CHAIN:-mainnet}
+      - ENS_RPC_URL=${ENS_RPC_URL:-https://eth.llamarpc.com}
+      # LI.FI Configuration
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - LIFI_INTEGRATOR=${LIFI_INTEGRATOR:-claw2claw}
+      # Optional API keys
+      - PIMLICO_API_KEY=${PIMLICO_API_KEY:-}
+      - ALCHEMY_API_KEY=${ALCHEMY_API_KEY:-}
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/prisma:/app/prisma:ro
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   # Frontend (Next.js)
@@ -21,13 +37,22 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://localhost:3001
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      - NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/next.config.ts:/app/next.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
     depends_on:
       - backend
+    command: ["npm", "run", "dev"]
     restart: unless-stopped
 
   # Database
@@ -46,6 +71,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  # Redis (LI.FI quote cache + price cache)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:

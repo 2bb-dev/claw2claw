@@ -1,29 +1,46 @@
 'use client'
 
 import { api } from '@/lib/api'
+import { formatTokenAmount } from '@/lib/format'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
+type ViewMode = 'all' | 'p2p'
+
 interface Deal {
   id: string
-  type: 'buy' | 'sell'
-  tokenPair: string
-  price: number
-  amount: number
-  total: number
-  maker: { id: string; name: string; ensName?: string }
-  taker: { id: string; name: string; ensName?: string }
-  executedAt: string
+  txHash?: string
+  regime?: string
+  chainId?: number
+  fromToken: string
+  toToken: string
+  fromAmount: string
+  toAmount: string
+  fromTokenDecimals: number
+  toTokenDecimals: number
+  botAddress: string
+  botEnsName?: string | null
+  status: string
+  createdAt: string
 }
 
-export function DealsList() {
+interface DealsListProps {
+  viewMode: ViewMode
+  botAddress?: string | null
+  botLabel?: string | null
+}
+
+export function DealsList({ viewMode, botAddress, botLabel }: DealsListProps) {
   const [deals, setDeals] = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function fetchDeals() {
       try {
-        const res = await api.get('/api/deals')
+        const params = new URLSearchParams()
+        if (botAddress) params.set('botAddress', botAddress)
+
+        const res = await api.get(`/api/deals?${params.toString()}`)
         setDeals(res.data.deals || [])
       } catch (error) {
         console.error('Failed to fetch deals:', error)
@@ -32,10 +49,16 @@ export function DealsList() {
       }
     }
 
+    setLoading(true)
     fetchDeals()
     const interval = setInterval(fetchDeals, 10000)
     return () => clearInterval(interval)
-  }, [])
+  }, [botAddress])
+
+  const filteredDeals = (viewMode === 'p2p'
+    ? deals.filter((d) => d.regime === 'p2p')
+    : deals
+  ).filter((d) => botAddress || d.status !== 'failed')
 
   function timeAgo(dateString: string) {
     const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000)
@@ -43,68 +66,100 @@ export function DealsList() {
     const minutes = Math.floor(seconds / 60)
     if (minutes < 60) return `${minutes} min ago`
     const hours = Math.floor(minutes / 60)
-    return `${hours}h ago`
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
   }
 
-  function truncateId(id: string) {
-    if (id.length <= 12) return id
-    return `${id.slice(0, 8)}...${id.slice(-4)}`
+  function truncateAddress(addr: string) {
+    if (addr.length <= 12) return addr
+    return `${addr.slice(0, 6)}...${addr.slice(-4)}`
   }
+
+  function regimeLabel(regime?: string) {
+    if (!regime) return 'P2P'
+    if (regime.startsWith('lifi')) return 'LI.FI'
+    return 'P2P'
+  }
+
+  function regimeStyle(regime?: string) {
+    if (regime && regime.startsWith('lifi')) {
+      return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
+    }
+    return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+  }
+
+  const headerText = botLabel
+    ? `Trades for ${botLabel.includes('.') ? botLabel : truncateAddress(botLabel)}`
+    : 'Latest Trades'
 
   return (
     <div className="bg-card border border-border rounded-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="font-semibold text-foreground">Latest Deals</h3>
+        <h3 className="font-semibold text-foreground">{headerText}</h3>
+        <span className="text-xs text-muted-foreground">
+          {filteredDeals.length} {viewMode === 'p2p' ? 'P2P' : 'total'} trades
+        </span>
       </div>
 
       {/* List */}
       <div className="divide-y divide-border">
         {loading ? (
           <div className="text-center text-muted-foreground py-12">Loading...</div>
-        ) : deals.length === 0 ? (
+        ) : filteredDeals.length === 0 ? (
           <div className="text-center text-muted-foreground py-12">
-            No deals yet
+            No {viewMode === 'p2p' ? 'P2P ' : ''}trades yet
           </div>
         ) : (
-          deals.slice(0, 6).map((deal) => (
+          filteredDeals.slice(0, 10).map((deal) => (
             <Link
               key={deal.id}
               href={`/deals/${deal.id}`}
               className="block px-4 py-3 hover:bg-muted/30 transition-colors"
             >
-              <div className="flex items-center justify-between">
-                {/* Left: Deal ID & Time */}
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded bg-green-500/20 flex items-center justify-center text-xs font-bold text-green-500">
-                    ✓
-                  </div>
-                  <div>
-                    <div className="font-mono text-primary text-sm">
-                      {truncateId(deal.id)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {timeAgo(deal.executedAt)}
-                    </div>
-                  </div>
+              <div className="flex items-center gap-4">
+                {/* Status icon */}
+                <div className={`w-8 h-8 rounded flex-shrink-0 flex items-center justify-center text-xs font-bold ${
+                  deal.status === 'completed' ? 'bg-green-500/20 text-green-500' : deal.status === 'failed' ? 'bg-red-500/20 text-red-500' : 'bg-yellow-500/20 text-yellow-500'
+                }`}>
+                  {deal.status === 'completed' ? '✓' : deal.status === 'failed' ? '✗' : '⏳'}
                 </div>
 
-                {/* Middle: From → To */}
-                <div className="hidden md:block text-sm">
-                  <span className="text-muted-foreground">From </span>
-                  <span className="text-primary">{truncateId(deal.maker.name)}</span>
-                  <br />
-                  <span className="text-muted-foreground">To </span>
-                  <span className="text-chart-2">{truncateId(deal.taker.name)}</span>
-                </div>
-
-                {/* Right: Amount */}
-                <div className="text-right">
-                  <div className="font-mono text-sm">
-                    {deal.amount} {deal.tokenPair.split('/')[0]}
+                {/* Swap pair + bot identity */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-foreground text-sm">
+                      {deal.fromToken} → {deal.toToken}
+                    </span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${regimeStyle(deal.regime)}`}>
+                      {regimeLabel(deal.regime)}
+                    </span>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    ${deal.total.toLocaleString()}
+                    {deal.botEnsName ? (
+                      <a
+                        href={`https://sepolia.app.ens.domains/${deal.botEnsName}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-primary hover:underline"
+                      >
+                        {deal.botEnsName}
+                      </a>
+                    ) : (
+                      truncateAddress(deal.botAddress)
+                    )} · {timeAgo(deal.createdAt)}
+                  </div>
+                </div>
+
+                {/* Amount */}
+                <div className="text-right flex-shrink-0">
+                  <div className="font-mono text-sm">
+                    {formatTokenAmount(deal.fromAmount, deal.fromTokenDecimals)} {deal.fromToken}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    → {deal.toAmount ? formatTokenAmount(deal.toAmount, deal.toTokenDecimals) : '...'} {deal.toToken}
                   </div>
                 </div>
               </div>
@@ -119,7 +174,7 @@ export function DealsList() {
           href="/deals"
           className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
         >
-          VIEW ALL DEALS →
+          VIEW ALL TRADES →
         </Link>
       </div>
     </div>
