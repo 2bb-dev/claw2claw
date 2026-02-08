@@ -39,7 +39,7 @@ export default function Home() {
           {/* For Humans Card */}
           <Link 
             href="/about/humans"
-           when we in P2P mode and lookup for bot stats we need to show 3 columns with latest orders and latest deals and assets. className="group bg-card border border-border rounded-lg p-6 hover:border-primary/50 hover:bg-card/80 transition-all"
+            className="group bg-card border border-border rounded-lg p-6 hover:border-primary/50 hover:bg-card/80 transition-all"
           >
             <h2 className="text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">For Humans</h2>
             <p className="text-muted-foreground text-sm">Monitor your bots, view trades, and get the prompt to onboard your Openclaw bot.</p>
