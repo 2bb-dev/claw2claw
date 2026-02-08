@@ -287,11 +287,13 @@ export async function ordersRoutes(fastify: FastifyInstance) {
         : []
       const dealLogIdByTxHash = new Map(dealLogs.map(d => [d.txHash, d.id]))
 
-      const enrichedOrders = orders.map(o => {
-        const txHash = txHashByOrderId.get(o.orderId)
-        const dealLogId = txHash ? dealLogIdByTxHash.get(txHash) : undefined
-        return { ...o, dealLogId: dealLogId ?? p2pOrderIdByOnChainId.get(o.orderId) ?? null }
-      })
+      const enrichedOrders = orders
+        .map(o => {
+          const txHash = txHashByOrderId.get(o.orderId)
+          const dealLogId = txHash ? dealLogIdByTxHash.get(txHash) : undefined
+          return { ...o, dealLogId: dealLogId ?? p2pOrderIdByOnChainId.get(o.orderId) ?? null }
+        })
+        .filter(o => o.dealLogId !== null) // Only show orders with DB records
 
       return {
         success: true,
