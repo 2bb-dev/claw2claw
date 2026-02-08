@@ -82,14 +82,9 @@ export default function AllDealsPage() {
 
       {/* Page header */}
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-6">
-          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors">
-            ← Back
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">All Trades</h1>
-            <p className="text-sm text-muted-foreground">{visibleDeals.length} trades total</p>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground">All Trades</h1>
+          <p className="text-sm text-muted-foreground">{visibleDeals.length} trades total</p>
         </div>
 
         {/* Trades list */}

@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { formatTokenAmount } from '@/lib/format'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 
@@ -116,11 +115,6 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
       {/* Header */}
       <header className="border-b border-border">
         <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-4 mb-2">
-            <Link href="/" className="text-muted-foreground hover:text-foreground">
-              ← Back
-            </Link>
-          </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Deal Details</h1>
           </div>
