@@ -60,12 +60,12 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
     
     // Get wallet balance if configured
-    let walletBalance = null
+    let walletBalance: { formatted: string; symbol: string } | null = null
     const walletAddress = bot.wallet?.walletAddress
     if (walletAddress) {
       try {
         const balance = await getWalletBalance(walletAddress)
-        walletBalance = balance.toString()
+        walletBalance = { formatted: balance.formatted, symbol: balance.symbol }
       } catch {
         // Wallet balance fetch failed, continue without it
       }
@@ -245,8 +245,9 @@ export async function botsRoutes(fastify: FastifyInstance) {
         wallet: {
           address: walletAddress,
           ensName: bot.ensName || null,
-          balance: balance.toString(),
-          balanceFormatted: `${(Number(balance) / 1e18).toFixed(6)} ETH`
+          balance: balance.formatted,
+          symbol: balance.symbol,
+          balanceFormatted: `${parseFloat(balance.formatted).toFixed(6)} ${balance.symbol}`
         }
       }
     } catch (error) {
