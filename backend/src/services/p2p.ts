@@ -767,38 +767,49 @@ export async function getActiveOrders(tokenA?: string, tokenB?: string): Promise
 }
 
 /**
- * Read active orders from ALL known token pool pairs.
- * Iterates every unique pair, calls getPoolOrders for each,
- * and merges the results — so orders on DEGEN/USDC, WETH/DAI etc. all show up.
+ * Read active orders from ALL pools that have P2POrders.
+ * Discovers pools from DB records, then queries each on-chain.
  */
 export async function getAllActiveOrders(): Promise<OnChainOrder[]> {
-  const symbols = Object.keys(KNOWN_TOKENS)
-  const allOrders: OnChainOrder[] = []
-  const seenOrderIds = new Set<number>()
+  // Get distinct pool pairs from DB
+  const dbOrders = await prisma.p2POrder.findMany({
+    where: { status: 'active' },
+    select: { poolKey: true },
+  })
 
-  // Generate all unique pairs
-  const pairs: [string, string][] = []
-  for (let i = 0; i < symbols.length; i++) {
-    for (let j = i + 1; j < symbols.length; j++) {
-      pairs.push([symbols[i], symbols[j]])
+  // Extract unique token pairs from poolKey JSON
+  const poolPairs = new Map<string, { tokenA: string; tokenB: string }>()
+  for (const o of dbOrders) {
+    const pk = o.poolKey as Record<string, string>
+    if (pk?.currency0 && pk?.currency1) {
+      const key = `${pk.currency0.toLowerCase()}-${pk.currency1.toLowerCase()}`
+      if (!poolPairs.has(key)) {
+        // Resolve to symbols
+        const t0 = TOKEN_BY_ADDRESS[pk.currency0.toLowerCase()]
+        const t1 = TOKEN_BY_ADDRESS[pk.currency1.toLowerCase()]
+        if (t0 && t1) {
+          poolPairs.set(key, { tokenA: t0.symbol, tokenB: t1.symbol })
+        }
+      }
     }
   }
 
-  // Query each pair in parallel
-  const results = await Promise.allSettled(
-    pairs.map(([a, b]) => getActiveOrders(a, b))
-  )
+  const allOrders: OnChainOrder[] = []
+  const seenOrderIds = new Set<number>()
 
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      for (const order of result.value) {
+  // Query each known pool sequentially (avoids RPC rate limits)
+  for (const { tokenA, tokenB } of poolPairs.values()) {
+    try {
+      const orders = await getActiveOrders(tokenA, tokenB)
+      for (const order of orders) {
         if (!seenOrderIds.has(order.orderId)) {
           seenOrderIds.add(order.orderId)
           allOrders.push(order)
         }
       }
+    } catch (err) {
+      console.warn(`[getAllActiveOrders] Failed to query pool ${tokenA}/${tokenB}:`, err)
     }
-    // Silently skip failed pools (e.g. uninitialized)
   }
 
   return allOrders
