@@ -1,6 +1,7 @@
+import { getWalletBalances } from '@lifi/sdk'
 import { Prisma } from '@prisma/client'
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { isAddress } from 'viem'
+import { formatUnits, isAddress } from 'viem'
 import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
 import { cached, invalidate } from '../services/cache.js'
@@ -251,6 +252,75 @@ export async function botsRoutes(fastify: FastifyInstance) {
     } catch (error) {
       console.error('Wallet balance fetch error:', error)
       return reply.status(500).send({ error: 'Failed to fetch wallet balance' })
+    }
+  })
+
+  // GET /api/bots/assets/:address - Get all token balances for a wallet (via LI.FI)
+  fastify.get<{ Params: { address: string } }>('/assets/:address', async (request, reply) => {
+    const { address } = request.params
+
+    if (!isAddress(address)) {
+      return reply.status(400).send({ error: 'Invalid Ethereum address' })
+    }
+
+    try {
+      const balancesByChain = await cached(
+        `lifi:balances:${address}`,
+        60, // 1 minute cache
+        () => getWalletBalances(address)
+      ) as Record<number, any[]>
+
+      // Flatten all chains into a single sorted list
+      const assets: {
+        chainId: number
+        symbol: string
+        name: string
+        address: string
+        amount: string
+        amountFormatted: string
+        priceUSD: string
+        valueUSD: number
+        logoURI?: string
+        decimals: number
+      }[] = []
+
+      for (const [chainId, tokens] of Object.entries(balancesByChain)) {
+        for (const token of tokens) {
+          if (!token.amount || token.amount === '0') continue
+          const amountFormatted = formatUnits(BigInt(token.amount), token.decimals)
+          const priceUSD = token.priceUSD || '0'
+          const valueUSD = parseFloat(amountFormatted) * parseFloat(priceUSD)
+          if (valueUSD < 0.01) continue // Skip dust
+
+          assets.push({
+            chainId: Number(chainId),
+            symbol: token.symbol,
+            name: token.name,
+            address: token.address,
+            amount: token.amount,
+            amountFormatted: parseFloat(amountFormatted).toLocaleString('en-US', { maximumFractionDigits: 6 }),
+            priceUSD,
+            valueUSD: Math.round(valueUSD * 100) / 100,
+            logoURI: token.logoURI,
+            decimals: token.decimals,
+          })
+        }
+      }
+
+      // Sort by USD value descending
+      assets.sort((a, b) => b.valueUSD - a.valueUSD)
+
+      const totalUSD = assets.reduce((sum, a) => sum + a.valueUSD, 0)
+
+      return {
+        success: true,
+        walletAddress: address,
+        totalUSD: Math.round(totalUSD * 100) / 100,
+        assets,
+      }
+    } catch (error) {
+      console.error('Asset balance fetch error:', error)
+      return reply.status(500).send({ error: 'Failed to fetch wallet balances' })
     }
   })
 

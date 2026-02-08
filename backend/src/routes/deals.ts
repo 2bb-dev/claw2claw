@@ -1,7 +1,24 @@
 import { getToken, type ChainId as LiFiChainId } from '@lifi/sdk'
 import { FastifyInstance } from 'fastify'
+import { formatUnits } from 'viem'
 import { prisma } from '../db.js'
 import { cached } from '../services/cache.js'
+
+// Known token decimals (fallback to 18)
+const TOKEN_DECIMALS: Record<string, number> = {
+  ETH: 18, WETH: 18, USDC: 6, USDT: 6, DAI: 18,
+  WBTC: 8, MATIC: 18, AVAX: 18, BNB: 18, ARB: 18, OP: 18,
+}
+
+function parseTokenAmount(raw: string | null, symbol: string): number {
+  if (!raw || raw === '0') return 0
+  const decimals = TOKEN_DECIMALS[symbol.toUpperCase()] ?? 18
+  try {
+    return parseFloat(formatUnits(BigInt(raw), decimals))
+  } catch {
+    return parseFloat(raw) || 0
+  }
+}
 
 export async function dealsRoutes(fastify: FastifyInstance) {
   // GET /api/deals - List all deal logs (optionally filtered by botAddress)
@@ -53,8 +70,8 @@ export async function dealsRoutes(fastify: FastifyInstance) {
       tradesPerHour = Math.round((totalTrades / hoursElapsed) * 10) / 10
     }
 
-    // Total volume in USD
-    const totalVolume = deals.reduce((acc, d) => acc + parseFloat(d.fromAmount || '0'), 0)
+    // Total volume (approximate — raw amounts converted to real values)
+    const totalVolume = deals.reduce((acc, d) => acc + parseTokenAmount(d.fromAmount, d.fromToken), 0)
 
     // PNL calculation using LI.FI priceUSD
     let totalPnl: number | null = null
@@ -98,8 +115,8 @@ export async function dealsRoutes(fastify: FastifyInstance) {
 
           const fromPrice = prices[deal.fromToken] ?? 0
           const toPrice = prices[deal.toToken] ?? 0
-          const fromVal = parseFloat(deal.fromAmount || '0') * fromPrice
-          const toVal = parseFloat(deal.toAmount || '0') * toPrice
+          const fromVal = parseTokenAmount(deal.fromAmount, deal.fromToken) * fromPrice
+          const toVal = parseTokenAmount(deal.toAmount, deal.toToken) * toPrice
           pnl += toVal - fromVal
         }
         totalPnl = Math.round(pnl * 100) / 100

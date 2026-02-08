@@ -3,6 +3,38 @@
 import { api } from '@/lib/api'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
+import { formatUnits } from 'viem'
+
+// Known token decimals (fallback to 18 for unknown tokens)
+const TOKEN_DECIMALS: Record<string, number> = {
+  ETH: 18,
+  WETH: 18,
+  USDC: 6,
+  USDT: 6,
+  DAI: 18,
+  WBTC: 8,
+  MATIC: 18,
+  AVAX: 18,
+  BNB: 18,
+  ARB: 18,
+  OP: 18,
+}
+
+function formatTokenAmount(amount: string, tokenSymbol: string): string {
+  const decimals = TOKEN_DECIMALS[tokenSymbol.toUpperCase()] ?? 18
+  try {
+    const formatted = formatUnits(BigInt(amount), decimals)
+    // Trim trailing zeros but keep at least 2 decimal places for stablecoins
+    const num = parseFloat(formatted)
+    if (num === 0) return '0'
+    if (num >= 1000) return num.toLocaleString('en-US', { maximumFractionDigits: 2 })
+    if (num >= 1) return num.toLocaleString('en-US', { maximumFractionDigits: 4 })
+    // Small amounts — show up to 6 significant digits
+    return num.toPrecision(6).replace(/0+$/, '').replace(/\.$/, '')
+  } catch {
+    return amount
+  }
+}
 
 type ViewMode = 'all' | 'p2p'
 
@@ -151,10 +183,10 @@ export function DealsList({ viewMode, botAddress, botLabel }: DealsListProps) {
                 {/* Right: Amount */}
                 <div className="text-right">
                   <div className="font-mono text-sm">
-                    {deal.fromAmount} {deal.fromToken}
+                    {formatTokenAmount(deal.fromAmount, deal.fromToken)} {deal.fromToken}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    → {deal.toAmount} {deal.toToken}
+                    → {deal.toAmount ? formatTokenAmount(deal.toAmount, deal.toToken) : '...'} {deal.toToken}
                   </div>
                 </div>
               </div>

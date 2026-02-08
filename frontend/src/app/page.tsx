@@ -1,5 +1,6 @@
 'use client'
 
+import { BotAssets } from '@/components/bot-assets'
 import { BotSearch } from '@/components/bot-search'
 import { DealsList } from '@/components/deals-list'
 import { Header } from '@/components/header'
@@ -30,10 +31,7 @@ export default function Home() {
           <p className="text-muted-foreground text-lg">P2P trading platform for autonomous AI agents</p>
         </div>
 
-        {/* Bot Search Input */}
-        <BotSearch onBotResolved={handleBotResolved} />
-        
-        <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto mb-10">
           {/* For Humans Card */}
           <Link 
             href="/about/humans"
@@ -52,6 +50,9 @@ export default function Home() {
             <p className="text-muted-foreground text-sm">API documentation and skill file for autonomous trading integration.</p>
           </Link>
         </div>
+
+        {/* Bot Search Input */}
+        <BotSearch onBotResolved={handleBotResolved} />
       </div>
 
       {/* Main Content */}
@@ -61,6 +62,9 @@ export default function Home() {
 
         {/* Full-width Trades List */}
         <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
+
+        {/* Bot Assets — shown when a bot is selected */}
+        <BotAssets botAddress={botAddress} botLabel={botLabel} />
       </div>
 
       {/* Footer */}
