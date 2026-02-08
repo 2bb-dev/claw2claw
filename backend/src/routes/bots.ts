@@ -17,6 +17,7 @@ import {
   setBotTextRecords,
 } from '../services/ens.js'
 import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
+import { isP2PConfigured } from '../services/p2p.js'
 
 interface RegisterBody {
   name: string
@@ -128,7 +129,23 @@ export async function botsRoutes(fastify: FastifyInstance) {
         // ENS lookup failed, continue without it
       }
     }
-    
+    // P2P trading readiness
+    const hasWallet = !!walletAddress
+    const hasEns = !!ensName
+    const p2pConfigured = isP2PConfigured()
+    const p2pEnabled = hasWallet && hasEns && p2pConfigured
+
+    let p2pStatus: string
+    if (p2pEnabled) {
+      p2pStatus = 'ready'
+    } else if (!p2pConfigured) {
+      p2pStatus = 'P2P not configured on this server'
+    } else if (!hasWallet) {
+      p2pStatus = 'Wallet required — register with createWallet: true'
+    } else {
+      p2pStatus = 'ENS identity required — register with createEns: true, or ask your operator to enable ENS for P2P trading'
+    }
+
     return {
       success: true,
       bot: {
@@ -137,6 +154,8 @@ export async function botsRoutes(fastify: FastifyInstance) {
         walletAddress: walletAddress || null,
         walletBalance,
         ensProfile,
+        p2pEnabled,
+        p2pStatus,
         createdAt: bot.createdAt,
       }
     }
