@@ -59,15 +59,61 @@ export async function botsRoutes(fastify: FastifyInstance) {
       })
     }
     
-    // Get wallet balance if configured
-    let walletBalance: { formatted: string; symbol: string } | null = null
+    // Get full multi-chain portfolio via LI.FI (same as /assets/:address)
+    let walletBalance: {
+      totalUSD: number
+      assets: {
+        chainId: number
+        symbol: string
+        name: string
+        amount: string
+        amountFormatted: string
+        priceUSD: string
+        valueUSD: number
+        logoURI?: string
+        decimals: number
+      }[]
+    } | null = null
     const walletAddress = bot.wallet?.walletAddress
     if (walletAddress) {
       try {
-        const balance = await getWalletBalance(walletAddress)
-        walletBalance = { formatted: balance.formatted, symbol: balance.symbol }
+        const balancesByChain = await cached(
+          `lifi:balances:${walletAddress}`,
+          60,
+          () => getWalletBalances(walletAddress)
+        ) as Record<number, any[]>
+
+        const assets: {
+          chainId: number; symbol: string; name: string; amount: string;
+          amountFormatted: string; priceUSD: string; valueUSD: number;
+          logoURI?: string; decimals: number;
+        }[] = []
+        for (const [chainId, tokens] of Object.entries(balancesByChain)) {
+          for (const token of tokens) {
+            if (!token.amount || token.amount === '0') continue
+            const amountFormatted = formatUnits(BigInt(token.amount), token.decimals)
+            const priceUSD = token.priceUSD || '0'
+            const valueUSD = parseFloat(amountFormatted) * parseFloat(priceUSD)
+            if (valueUSD < 0.01) continue
+
+            assets.push({
+              chainId: Number(chainId),
+              symbol: token.symbol,
+              name: token.name,
+              amount: token.amount,
+              amountFormatted: parseFloat(amountFormatted).toLocaleString('en-US', { maximumFractionDigits: 6 }),
+              priceUSD,
+              valueUSD: Math.round(valueUSD * 100) / 100,
+              logoURI: token.logoURI,
+              decimals: token.decimals,
+            })
+          }
+        }
+        assets.sort((a, b) => b.valueUSD - a.valueUSD)
+        const totalUSD = assets.reduce((sum, a) => sum + a.valueUSD, 0)
+        walletBalance = { totalUSD: Math.round(totalUSD * 100) / 100, assets }
       } catch {
-        // Wallet balance fetch failed, continue without it
+        // LI.FI balance fetch failed, continue without it
       }
     }
 
