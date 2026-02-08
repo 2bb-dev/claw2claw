@@ -150,6 +150,16 @@ export function OrdersList({ botAddress, botLabel }: OrdersListProps) {
           })
         )}
       </div>
+
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-border">
+        <Link
+          href="/orders"
+          className="text-sm text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1"
+        >
+          VIEW ALL ORDERS →
+        </Link>
+      </div>
     </div>
   )
 }

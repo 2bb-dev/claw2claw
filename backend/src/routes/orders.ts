@@ -14,15 +14,15 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { authenticateBot } from '../auth.js'
 import { prisma } from '../db.js'
 import {
-  addToken,
-  cancelP2POrder,
-  executeP2PSwap,
-  getActiveOrders,
-  getKnownTokens,
-  getP2PConfig,
-  initializePool,
-  isP2PConfigured,
-  postP2POrder,
+    addToken,
+    cancelP2POrder,
+    executeP2PSwap,
+    getActiveOrders,
+    getKnownTokens,
+    getP2PConfig,
+    initializePool,
+    isP2PConfigured,
+    postP2POrder,
 } from '../services/p2p.js'
 
 // ── Types ──
@@ -175,12 +175,36 @@ export async function ordersRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // GET /api/orders/detail/:id — Get a single P2P order deal by deal log ID (public)
+  // GET /api/orders/detail/:id — Get a single P2P order deal by deal log ID or on-chain orderId (public)
   fastify.get<{ Params: { id: string } }>('/detail/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const { id } = request.params
 
+    // Known token decimals fallback
+    const TOKEN_DECIMALS: Record<string, number> = {
+      ETH: 18, WETH: 18, USDC: 6, USDT: 6, DAI: 18,
+      WBTC: 8, CBBTC: 8, MATIC: 18, AVAX: 18, BNB: 18,
+    }
 
-    const deal = await prisma.dealLog.findUnique({ where: { id } })
+    // Check if id is a numeric on-chain orderId
+    const numericId = parseInt(id, 10)
+    const isNumeric = !isNaN(numericId) && String(numericId) === id
+
+    let deal: any = null
+
+    if (isNumeric) {
+      // Lookup by on-chain orderId → P2POrder → DealLog
+      const p2pOrder = await prisma.p2POrder.findFirst({
+        where: { onChainId: numericId },
+      })
+      if (p2pOrder?.txHash) {
+        deal = await prisma.dealLog.findFirst({
+          where: { txHash: p2pOrder.txHash, regime: 'p2p-post' },
+        })
+      }
+    } else {
+      // Lookup by deal log UUID
+      deal = await prisma.dealLog.findUnique({ where: { id } })
+    }
 
     if (!deal || !deal.regime.startsWith('p2p')) {
       return reply.status(404).send({ error: 'Order not found' })
@@ -193,12 +217,6 @@ export async function ordersRoutes(fastify: FastifyInstance) {
       where: { walletAddress: deal.botAddress },
       include: { botAuth: { select: { ensName: true } } },
     })
-
-    // Known token decimals fallback
-    const TOKEN_DECIMALS: Record<string, number> = {
-      ETH: 18, WETH: 18, USDC: 6, USDT: 6, DAI: 18,
-      WBTC: 8, CBBTC: 8, MATIC: 18, AVAX: 18, BNB: 18,
-    }
 
     return {
       success: true,
