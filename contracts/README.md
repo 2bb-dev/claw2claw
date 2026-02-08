@@ -247,18 +247,20 @@ This means our tests verify the **complete P2P settlement flow**:
 - ✅ PM sends input tokens to maker via `take()`
 - ✅ BeforeSwapDelta values are correct (specified + unspecified)
 
-### Test Coverage (27 tests)
+### Test Coverage (34 tests)
 
 | Category | Tests | What's Verified |
 |----------|-------|-----------------|
-| **Admin** | 6 | addBot, removeBot, setAdmin, events, access control |
-| **Order Posting** | 5 | Success, escrow transfer, events, zero-amount/duration reverts |
-| **Order Cancellation** | 4 | Success, refund, events, unauthorized, double-cancel |
+| **Admin** | 7 | addBot, removeBot, two-step setAdmin/acceptAdmin, events, access control |
+| **Order Posting** | 6 | Success, escrow transfer, events, zero-amount/duration reverts, max duration |
+| **Order Cancellation** | 5 | Success, refund, events, unauthorized, double-cancel, cross-pool theft prevention |
 | **P2P Matching** | 6 | Full settlement (both directions), token balances, multi-order, skip-filled |
-| **No Match** | 3 | Same direction, insufficient amount, expired orders |
+| **No Match** | 4 | Same direction, insufficient amount, expired orders, non-whitelisted passthrough |
 | **View Functions** | 1 | getPoolOrders |
 | **afterSwap** | 1 | No-op verification |
-| **Access Control** | 1 | Non-PM caller revert |
+| **Access Control** | 2 | Non-PM caller revert, exact-output fallthrough |
+| **Cleanup** | 1 | purgeExpiredOrders |
+| **Security** | 1 | Cancel order cross-pool key mismatch |
 
 ## Contract Addresses
 
@@ -267,16 +269,17 @@ This means our tests verify the **complete P2P settlement flow**:
 | Contract | Address |
 |----------|---------|
 | Uniswap v4 PoolManager | [`0x498581fF718922c3f8e6A244956aF099B2652b2b`](https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b) |
-| **Claw2ClawHook** | [`0xcCFAf7E2c4C46064aF5Df6dB6a22A377a2d10188`](https://basescan.org/address/0xcCFAf7E2c4C46064aF5Df6dB6a22A377a2d10188) |
-| SimpleSwapRouter | [`0x02cb315Aa9189604204FfaA61A7fB5C05Fd0cA2a`](https://basescan.org/address/0x02cb315Aa9189604204FfaA61A7fB5C05Fd0cA2a) |
+| **Claw2ClawHook** | [`0x9114Ff08A837d0F8F9db23234Bf99794131FC188`](https://basescan.org/address/0x9114Ff08A837d0F8F9db23234Bf99794131FC188) |
+| CREATE2 Factory | [`0x06AfaaB8e1CBCaDd0D921fb1E7F5226052693D69`](https://basescan.org/address/0x06AfaaB8e1CBCaDd0D921fb1E7F5226052693D69) |
+| SimpleSwapRouter | [`0xe5b4A4dF8387858852B861B36AB5B512d7838346`](https://basescan.org/address/0xe5b4A4dF8387858852B861B36AB5B512d7838346) |
 
 #### Verified Mainnet P2P Trade (USDC ↔ WETH)
 
 | Step | Transaction |
 |------|-------------|
-| Pool initialized (WETH/USDC with hook) | [`0xf5b7840f...`](https://basescan.org/tx/0xf5b7840fe19e4b5c81581fee45d25d0fb561c23750806ba5d20694ff365210a2) |
-| Bot A posted order (sell 5 USDC for ≥0.001 WETH) | [`0x0b11d92d...`](https://basescan.org/tx/0x0b11d92da0385b424d599eea41bc6d38f1830ec617d79817a01bcaf649c5afe8) |
-| **Bot B P2P swap (matched!)** | [`0x1dc3ae3a...`](https://basescan.org/tx/0x1dc3ae3a57996c922bfd097595dbeeb2245518cf4cf3c17b6d89ac69667d0739) |
+| Hook deployed (CREATE2, salt 1667) | [`0xc64fbdd4...`](https://basescan.org/tx/0xc64fbdd4607b4790b6eb0792ffcf62e57ef2c95cbc6a30cb48e138c90c7ff165) |
+| Bot A posted order (sell 21 USDC for ≥0.01 WETH) | [`0x42820e9c...`](https://basescan.org/tx/0x42820e9c061876b73aea3849fc2f12a2ec9ceb7157347843bc3f037318d2ccad) |
+| **Bot B P2P swap (21 USDC ↔ 0.01 WETH matched!)** | [`0x997a5226...`](https://basescan.org/tx/0x997a52269597da128a581848372006e09771afb2d0ccbff3ed5197f0a0baeada) |
 
 ## Usage Example
 

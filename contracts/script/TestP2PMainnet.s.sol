@@ -8,6 +8,7 @@ import "forge-std/Script.sol";
 import {Claw2ClawHook} from "../src/Claw2ClawHook.sol";
 import {IPoolManager} from "@v4-core/interfaces/IPoolManager.sol";
 import {PoolKey} from "@v4-core/types/PoolKey.sol";
+import {PoolId} from "@v4-core/types/PoolId.sol";
 import {Currency, CurrencyLibrary} from "@v4-core/types/Currency.sol";
 import {IHooks} from "@v4-core/interfaces/IHooks.sol";
 import {TickMath} from "@v4-core/libraries/TickMath.sol";
@@ -77,7 +78,7 @@ contract SimpleSwapRouter {
 
 contract TestP2PMainnet is Script {
     // --- Base mainnet addresses ---
-    address constant HOOK = 0xcCFAf7E2c4C46064aF5Df6dB6a22A377a2d10188;
+    address constant HOOK = 0x9114Ff08A837d0F8F9db23234Bf99794131FC188;
     address constant POOL_MANAGER = 0x498581fF718922c3f8e6A244956aF099B2652b2b;
     address constant WETH = 0x4200000000000000000000000000000000000006;
     address constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
@@ -96,7 +97,7 @@ contract TestP2PMainnet is Script {
         console.log("Bot A (maker, sells USDC):", botA);
         console.log("Bot B (taker, buys USDC):", botB);
 
-        // --- Pool key ---
+        // --- Pool key (must match existing initialized pool) ---
         // WETH < USDC (0x42... < 0x83...) so token0 = WETH, token1 = USDC
         PoolKey memory poolKey = PoolKey({
             currency0: Currency.wrap(WETH),
@@ -107,34 +108,39 @@ contract TestP2PMainnet is Script {
         });
 
         // =============================================
-        // PHASE 1: Admin setup
+        // PHASE 1: Admin — deploy router & whitelist
         // =============================================
         console.log("");
         console.log("--- Phase 1: Admin setup ---");
 
         vm.startBroadcast(adminKey);
 
-        // Deploy our own swap router (PoolSwapTest is NOT on mainnet)
         SimpleSwapRouter router = new SimpleSwapRouter(IPoolManager(POOL_MANAGER));
         console.log("SimpleSwapRouter deployed:", address(router));
 
-        // Whitelist bots + router
+        // Initialize pool if not already done
+        // Use staticcall to pre-check; if it reverts with PoolAlreadyInitialized, skip
+        uint160 sqrtPriceX96 = 3629026005862915997902874;
+        (bool willWork,) = POOL_MANAGER.staticcall(
+            abi.encodeWithSelector(IPoolManager.initialize.selector, poolKey, sqrtPriceX96)
+        );
+        if (willWork) {
+            IPoolManager(POOL_MANAGER).initialize(poolKey, sqrtPriceX96);
+            console.log("Pool initialized (WETH/USDC with Claw2ClawHook)");
+        } else {
+            console.log("Pool already initialized, skipping");
+        }
+
         Claw2ClawHook hook = Claw2ClawHook(HOOK);
         hook.addBot(botA);
         hook.addBot(botB);
         hook.addBot(address(router));
         console.log("Bots + router whitelisted");
 
-        // Initialize pool (WETH/USDC with our hook)
-        // sqrtPriceX96 for ~$2500 ETH: sqrt(2500 * 10^6 / 10^18) * 2^96
-        uint160 sqrtPriceX96 = 3961408125713216879677198;
-        IPoolManager(POOL_MANAGER).initialize(poolKey, sqrtPriceX96);
-        console.log("Pool initialized (WETH/USDC with Claw2ClawHook)");
-
         vm.stopBroadcast();
 
         // =============================================
-        // PHASE 2: Bot A posts a sell order (sells 5 USDC for WETH)
+        // PHASE 2: Bot A posts order (sell 21 USDC for ≥0.01 WETH)
         // =============================================
         console.log("");
         console.log("--- Phase 2: Bot A posts order ---");
@@ -144,17 +150,16 @@ contract TestP2PMainnet is Script {
         uint256 usdcBal = IERC20(USDC).balanceOf(botA);
         console.log("Bot A USDC balance:", usdcBal);
 
-        // Approve hook to pull USDC
         IERC20(USDC).approve(HOOK, type(uint256).max);
 
-        // Sell 5 USDC, want at least 0.001 WETH (~$2.50, basically any amount)
+        // Sell 21 USDC, want at least 0.01 WETH (~$21 at $2100/ETH)
         // sellToken0 = false because USDC is token1
         uint256 orderId = hook.postOrder(
             poolKey,
-            false,          // selling token1 (USDC)
-            5_000_000,      // 5 USDC (6 decimals)
-            1_000_000_000_000_000, // min 0.001 WETH (18 decimals) — ~$2.50
-            3600            // 1 hour expiry
+            false,              // selling token1 (USDC)
+            21_000_000,         // 21 USDC (6 decimals)
+            10_000_000_000_000_000, // min 0.01 WETH (18 decimals) — ~$21
+            3600                // 1 hour expiry
         );
         console.log("Order posted! ID:", orderId);
 
@@ -168,21 +173,20 @@ contract TestP2PMainnet is Script {
 
         vm.startBroadcast(botBKey);
 
-        // Wrap some ETH to WETH
-        IWETH(WETH).deposit{value: 0.005 ether}();
-        console.log("Bot B wrapped 0.005 ETH to WETH");
+        // Wrap 0.012 ETH to WETH (0.01 for trade + buffer)
+        IWETH(WETH).deposit{value: 0.012 ether}();
+        console.log("Bot B wrapped 0.012 ETH to WETH");
 
-        // Approve router to pull WETH
         IERC20(WETH).approve(address(router), type(uint256).max);
 
         // Swap: WETH → USDC (zeroForOne = true)
-        // amountSpecified = -0.002 ether (exact input, negative = exact input in v4)
-        // This should match Bot A's order (Bot A wants min 0.001 WETH, we're offering 0.002)
+        // amountSpecified = -0.01 ether (exact input 0.01 WETH ≈ $21)
+        // This should match Bot A's order (Bot A wants min 0.01 WETH, we're offering exactly 0.01)
         router.swap(
             poolKey,
             IPoolManager.SwapParams({
                 zeroForOne: true,
-                amountSpecified: -0.002 ether,
+                amountSpecified: -0.01 ether,
                 sqrtPriceLimitX96: TickMath.MIN_SQRT_PRICE + 1
             })
         );

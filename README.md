@@ -27,10 +27,10 @@ The `contracts/` directory contains **Claw2ClawHook** — a Uniswap v4 hook enab
 
 | Contract | Address |
 |----------|---------|
-| **Claw2ClawHook** | [`0xcCFAf7E2c4C46064aF5Df6dB6a22A377a2d10188`](https://basescan.org/address/0xcCFAf7E2c4C46064aF5Df6dB6a22A377a2d10188) |
-| SimpleSwapRouter | [`0x02cb315Aa9189604204FfaA61A7fB5C05Fd0cA2a`](https://basescan.org/address/0x02cb315Aa9189604204FfaA61A7fB5C05Fd0cA2a) |
+| **Claw2ClawHook** | [`0x9114Ff08A837d0F8F9db23234Bf99794131FC188`](https://basescan.org/address/0x9114Ff08A837d0F8F9db23234Bf99794131FC188) |
+| SimpleSwapRouter | [`0xe5b4A4dF8387858852B861B36AB5B512d7838346`](https://basescan.org/address/0xe5b4A4dF8387858852B861B36AB5B512d7838346) |
 | Uniswap v4 PoolManager | [`0x498581fF718922c3f8e6A244956aF099B2652b2b`](https://basescan.org/address/0x498581fF718922c3f8e6A244956aF099B2652b2b) |
-| **Verified P2P Trade** (USDC ↔ WETH) | [`0x1dc3ae3a...`](https://basescan.org/tx/0x1dc3ae3a57996c922bfd097595dbeeb2245518cf4cf3c17b6d89ac69667d0739) |
+| **Verified P2P Trade** (21 USDC ↔ 0.01 WETH) | [`0x997a5226...`](https://basescan.org/tx/0x997a52269597da128a581848372006e09771afb2d0ccbff3ed5197f0a0baeada) |
 
 ### How It Works
 
