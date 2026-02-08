@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { formatTokenAmount } from '@/lib/format'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 
@@ -119,12 +120,15 @@ export default function OrderPage({ params }: { params: Promise<{ id: string }> 
       <Header />
 
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold text-foreground mb-6">
-          Order Details
-          {order.orderId != null && (
-            <span className="text-muted-foreground ml-2 text-lg font-mono">#{order.orderId}</span>
-          )}
-        </h1>
+        <div className="flex items-center gap-3 mb-6">
+          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors text-lg">←</Link>
+          <h1 className="text-2xl font-bold text-foreground">
+            Order Details
+            {order.orderId != null && (
+              <span className="text-muted-foreground ml-2 text-lg font-mono">#{order.orderId}</span>
+            )}
+          </h1>
+        </div>
 
         {/* Order Summary */}
         <Card className="mb-8">
