@@ -10,7 +10,7 @@ import {PoolKey} from "@v4-core/types/PoolKey.sol";
 import {Currency} from "@v4-core/types/Currency.sol";
 import {IHooks} from "@v4-core/interfaces/IHooks.sol";
 import {BalanceDelta, toBalanceDelta} from "@v4-core/types/BalanceDelta.sol";
-import {BeforeSwapDelta, BeforeSwapDeltaLibrary, toBeforeSwapDelta} from "@v4-core/types/BeforeSwapDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "@v4-core/types/BeforeSwapDelta.sol";
 
 contract Claw2ClawHookTest is Test {
     Claw2ClawHook hook;
@@ -120,11 +120,28 @@ contract Claw2ClawHookTest is Test {
         hook.addBot(address(0x123));
     }
 
-    function test_setAdmin() public {
+    // M-2: two-step admin transfer
+    function test_setAdmin_twoStep() public {
+        vm.prank(admin);
+        hook.setAdmin(botA);
+        // admin should NOT have changed yet
+        assertEq(hook.admin(), admin);
+        assertEq(hook.pendingAdmin(), botA);
+
+        // botA accepts
+        vm.prank(botA);
+        hook.acceptAdmin();
+        assertEq(hook.admin(), botA);
+        assertEq(hook.pendingAdmin(), address(0));
+    }
+
+    function test_acceptAdmin_revert_notPending() public {
         vm.prank(admin);
         hook.setAdmin(botA);
 
-        assertEq(hook.admin(), botA);
+        vm.prank(botB);
+        vm.expectRevert(Claw2ClawHook.NotPendingAdmin.selector);
+        hook.acceptAdmin();
     }
 
     // ── Order posting tests ─────────────────────────────────────────
@@ -143,7 +160,7 @@ contract Claw2ClawHookTest is Test {
 
         assertEq(orderId, 0);
 
-        // Check order was stored
+        // Check order was stored (now includes poolId)
         (
             address maker,
             bool sellToken0,
@@ -151,6 +168,7 @@ contract Claw2ClawHookTest is Test {
             uint128 minAmountOut,
             uint256 expiry,
             bool active,
+            bytes32 poolId
         ) = hook.orders(orderId);
 
         assertEq(maker, botA);
@@ -159,6 +177,7 @@ contract Claw2ClawHookTest is Test {
         assertEq(minAmountOut, 90 ether);
         assertTrue(active);
         assertEq(expiry, block.timestamp + 3600);
+        assertEq(poolId, keccak256(abi.encode(poolKey)));
 
         // Check tokens were transferred to hook (escrow)
         assertEq(token0.balanceOf(botA), balanceBefore - 100 ether);
@@ -196,6 +215,13 @@ contract Claw2ClawHookTest is Test {
         vm.prank(botA);
         vm.expectRevert(Claw2ClawHook.InvalidDuration.selector);
         hook.postOrder(poolKey, true, 100 ether, 90 ether, 0);
+    }
+
+    // L-1: duration cap
+    function test_postOrder_revert_durationTooLong() public {
+        vm.prank(botA);
+        vm.expectRevert(Claw2ClawHook.DurationTooLong.selector);
+        hook.postOrder(poolKey, true, 100 ether, 90 ether, 31 days);
     }
 
     function test_postOrder_multipleOrders() public {
@@ -261,36 +287,29 @@ contract Claw2ClawHookTest is Test {
         hook.cancelOrder(orderId, poolKey);
     }
 
-    function test_cancelOrder_wrongPoolKey_doesNotRemoveFromCorrectPool() public {
+    // C-1: cancel with wrong PoolKey now reverts
+    function test_cancelOrder_revert_wrongPoolKey() public {
         // Post order on the real poolKey
         vm.prank(botA);
         uint256 orderId = hook.postOrder(poolKey, true, 100 ether, 90 ether, 3600);
-
-        // Verify order is in the real pool's array
-        uint256[] memory ordersBefore = hook.getPoolOrders(poolKey);
-        assertEq(ordersBefore.length, 1);
 
         // Build a wrong PoolKey (different fee)
         PoolKey memory wrongKey = PoolKey({
             currency0: poolKey.currency0,
             currency1: poolKey.currency1,
-            fee: 500,             // different fee → different poolId
+            fee: 500,             // different fee -> different poolId
             tickSpacing: 10,
             hooks: poolKey.hooks
         });
 
-        // Cancel with wrong key — order goes inactive but is NOT removed
-        // from the correct pool's array (it tries to remove from wrongKey's array)
+        // Cancel with wrong key should revert with PoolMismatch
         vm.prank(botA);
+        vm.expectRevert(Claw2ClawHook.PoolMismatch.selector);
         hook.cancelOrder(orderId, wrongKey);
 
-        // Order should be inactive
-        (, , , , , bool active,) = hook.orders(orderId);
-        assertFalse(active);
-
-        // But the order ID is still in the correct pool's array (not cleaned up)
-        uint256[] memory ordersAfter = hook.getPoolOrders(poolKey);
-        assertEq(ordersAfter.length, 1, "Order not removed from correct pool array");
+        // Order should still be active (revert means state unchanged)
+        (,,,,,bool active,) = hook.orders(orderId);
+        assertTrue(active);
     }
 
     // ── P2P matching tests (with settlement verification) ───────────
@@ -304,7 +323,8 @@ contract Claw2ClawHookTest is Test {
         uint256 makerToken1Before = token1.balanceOf(botA);
         uint256 hookToken0Before = token0.balanceOf(address(hook));
 
-        // Bot B swaps: sell 100 token1 for token0 (opposite direction → should match)
+        // Bot B swaps: sell 100 token1 for token0 (opposite direction -> should match)
+        // M-1 fix: taker now only pays order.minAmountOut (95 ether), not full input
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: false, // selling token1 for token0
             amountSpecified: -100 ether, // exact input
@@ -318,7 +338,7 @@ contract Claw2ClawHookTest is Test {
             botB,
             address(token1), // inputCurrency (taker sells token1)
             address(token0), // outputCurrency (taker gets token0)
-            100 ether,       // takerAmountIn
+            95 ether,        // takerPays = order.minAmountOut (M-1 fix)
             100 ether        // makerAmountOut (from escrow)
         );
 
@@ -330,10 +350,10 @@ contract Claw2ClawHookTest is Test {
         assertEq(selector, IHooks.beforeSwap.selector);
         assertEq(fee, 0);
 
-        // BeforeSwapDelta: specifiedDelta cancels swap, unspecifiedDelta provides output
+        // H-1 fix: specifiedDelta = takerPays (95e18), unspecifiedDelta = -order.amountIn (-100e18)
         int128 specifiedDelta = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta);
         int128 unspecifiedDelta = BeforeSwapDeltaLibrary.getUnspecifiedDelta(delta);
-        assertEq(specifiedDelta, 100 ether);   // positive: reduces amountToSwap to 0
+        assertEq(specifiedDelta, 95 ether);    // positive: reduces amountToSwap
         assertEq(unspecifiedDelta, -100 ether); // negative: hook provides output
 
         // -- Order state --
@@ -341,14 +361,14 @@ contract Claw2ClawHookTest is Test {
         assertFalse(active, "Order should be inactive after match");
 
         // -- Settlement verification via MockPM --
-        // 1. Hook called take(token1, maker, 100e18) → PM sent token1 to maker
+        // 1. Hook called take(token1, maker, 95e18) -> PM sent token1 to maker
         assertEq(mockPM.getTakeCallCount(), 1, "Should have 1 take call");
         (Currency takeCurrency, address takeTo, uint256 takeAmount) = mockPM.getTakeCall(0);
         assertEq(Currency.unwrap(takeCurrency), address(token1), "take: wrong currency");
         assertEq(takeTo, botA, "take: should send to maker");
-        assertEq(takeAmount, 100 ether, "take: wrong amount");
+        assertEq(takeAmount, 95 ether, "take: wrong amount (should be minAmountOut)");
 
-        // 2. Hook called settle with token0 (maker's escrowed tokens → PM)
+        // 2. Hook called settle with token0 (maker's escrowed tokens -> PM)
         assertEq(mockPM.getSettleCallCount(), 1, "Should have 1 settle call");
         (Currency settleCurrency, uint256 settleAmount) = mockPM.getSettleCall(0);
         assertEq(Currency.unwrap(settleCurrency), address(token0), "settle: wrong currency");
@@ -358,8 +378,8 @@ contract Claw2ClawHookTest is Test {
         // Maker received taker's input (token1) from PM
         assertEq(
             token1.balanceOf(botA),
-            makerToken1Before + 100 ether,
-            "Maker should receive taker's token1"
+            makerToken1Before + 95 ether,
+            "Maker should receive taker's token1 (minAmountOut)"
         );
 
         // Hook's escrowed token0 was sent to PM (for taker to receive)
@@ -378,12 +398,12 @@ contract Claw2ClawHookTest is Test {
     function test_p2pMatch_sellToken1() public {
         // Bot A posts order: sell 200 token1 for at least 180 token0
         vm.prank(botA);
-        uint256 orderId = hook.postOrder(poolKey, false, 200 ether, 180 ether, 3600);
+        hook.postOrder(poolKey, false, 200 ether, 180 ether, 3600);
 
         // Token1 should be escrowed
         assertEq(token1.balanceOf(address(hook)), 200 ether);
 
-        // Bot B swaps: sell 200 token0 for token1 (zeroForOne = true → opposite of sell token1)
+        // Bot B swaps: sell 200 token0 for token1 (zeroForOne = true -> opposite of sell token1)
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: true,
             amountSpecified: -200 ether,
@@ -396,15 +416,15 @@ contract Claw2ClawHookTest is Test {
 
         assertEq(selector, IHooks.beforeSwap.selector);
 
-        // Should match — delta cancels swap
+        // M-1 fix: specifiedDelta = minAmountOut (180e18), not full input
         int128 specifiedDelta = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta);
-        assertEq(specifiedDelta, 200 ether);
+        assertEq(specifiedDelta, 180 ether);
 
         // Verify settlement
         (Currency takeCurrency, address takeTo, uint256 takeAmount) = mockPM.getTakeCall(0);
         assertEq(Currency.unwrap(takeCurrency), address(token0), "take: token0 to maker");
         assertEq(takeTo, botA);
-        assertEq(takeAmount, 200 ether);
+        assertEq(takeAmount, 180 ether, "take: should be minAmountOut");
 
         (Currency settleCurrency, uint256 settleAmount) = mockPM.getSettleCall(0);
         assertEq(Currency.unwrap(settleCurrency), address(token1), "settle: token1 from escrow");
@@ -464,7 +484,7 @@ contract Claw2ClawHookTest is Test {
         // Warp past expiry
         vm.warp(block.timestamp + 2);
 
-        // Bot B tries to match — should skip expired order
+        // Bot B tries to match -- should skip expired order
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: false,
             amountSpecified: -100 ether,
@@ -484,7 +504,8 @@ contract Claw2ClawHookTest is Test {
         assertEq(mockPM.getTakeCallCount(), 0);
     }
 
-    function test_beforeSwap_revert_notWhitelisted() public {
+    // I-1: non-whitelisted senders fall through to AMM
+    function test_beforeSwap_nonWhitelisted_fallsThrough() public {
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: true,
             amountSpecified: -100 ether,
@@ -492,8 +513,28 @@ contract Claw2ClawHookTest is Test {
         });
 
         vm.prank(address(mockPM));
-        vm.expectRevert(Claw2ClawHook.NotWhitelisted.selector);
-        hook.beforeSwap(notBot, poolKey, params, "");
+        (bytes4 selector, BeforeSwapDelta delta, uint24 fee) =
+            hook.beforeSwap(notBot, poolKey, params, "");
+
+        assertEq(selector, IHooks.beforeSwap.selector);
+        assertEq(BeforeSwapDelta.unwrap(delta), 0, "Non-whitelisted should get ZERO_DELTA");
+        assertEq(fee, 0);
+    }
+
+    // I-2: exact-output swaps fall through to AMM
+    function test_beforeSwap_exactOutput_fallsThrough() public {
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: true,
+            amountSpecified: 100 ether, // positive = exact output
+            sqrtPriceLimitX96: 0
+        });
+
+        vm.prank(address(mockPM));
+        (bytes4 selector, BeforeSwapDelta delta,) =
+            hook.beforeSwap(botA, poolKey, params, "");
+
+        assertEq(selector, IHooks.beforeSwap.selector);
+        assertEq(BeforeSwapDelta.unwrap(delta), 0, "Exact-output should get ZERO_DELTA");
     }
 
     function test_beforeSwap_revert_notPoolManager() public {
@@ -553,7 +594,7 @@ contract Claw2ClawHookTest is Test {
         vm.prank(botA);
         hook.postOrder(poolKey, true, 200 ether, 180 ether, 3600); // order 1
 
-        // Swap with 100 token1 — should match order 0 (first valid)
+        // Swap with 100 token1 -- should match order 0 (first valid)
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: false,
             amountSpecified: -100 ether,
@@ -563,9 +604,9 @@ contract Claw2ClawHookTest is Test {
         vm.prank(address(mockPM));
         (,BeforeSwapDelta delta,) = hook.beforeSwap(botB, poolKey, params, "");
 
-        // Should match order 0
+        // M-1 fix: specifiedDelta = minAmountOut of order 0 (90 ether)
         int128 specifiedDelta = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta);
-        assertEq(specifiedDelta, 100 ether, "Should match");
+        assertEq(specifiedDelta, 90 ether, "Should match, paying minAmountOut");
 
         // Order 0 inactive, order 1 still active
         (,,,,,bool active0,) = hook.orders(0);
@@ -591,7 +632,7 @@ contract Claw2ClawHookTest is Test {
         vm.prank(address(mockPM));
         hook.beforeSwap(botB, poolKey, params1, "");
 
-        // Second swap should skip filled order 0 and match order 1
+        // Second swap should match order 1 (order 0 was removed via swap-and-pop)
         IPoolManager.SwapParams memory params2 = IPoolManager.SwapParams({
             zeroForOne: false,
             amountSpecified: -50 ether,
@@ -600,10 +641,107 @@ contract Claw2ClawHookTest is Test {
         vm.prank(address(mockPM));
         (,BeforeSwapDelta delta2,) = hook.beforeSwap(botB, poolKey, params2, "");
 
+        // M-1 fix: specifiedDelta = minAmountOut of order 1 (45 ether)
         int128 specifiedDelta = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta2);
-        assertEq(specifiedDelta, 50 ether, "Should match order 1");
+        assertEq(specifiedDelta, 45 ether, "Should match order 1, paying minAmountOut");
 
         (,,,,,bool active1,) = hook.orders(1);
         assertFalse(active1, "Order 1 should be filled");
+    }
+
+    // ── H-1: match with different taker/maker amounts ───────────────
+
+    function test_p2pMatch_differentAmounts() public {
+        // Bot A posts: sell 50 token0 for at least 40 token1
+        vm.prank(botA);
+        hook.postOrder(poolKey, true, 50 ether, 40 ether, 3600);
+
+        // Bot B swaps with 200 token1 -- much more than needed
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: false,
+            amountSpecified: -200 ether,
+            sqrtPriceLimitX96: 0
+        });
+
+        vm.prank(address(mockPM));
+        (bytes4 selector, BeforeSwapDelta delta,) =
+            hook.beforeSwap(botB, poolKey, params, "");
+
+        assertEq(selector, IHooks.beforeSwap.selector);
+
+        // H-1 fix: specified = minAmountOut (40), unspecified = -amountIn (-50)
+        int128 specifiedDelta = BeforeSwapDeltaLibrary.getSpecifiedDelta(delta);
+        int128 unspecifiedDelta = BeforeSwapDeltaLibrary.getUnspecifiedDelta(delta);
+        assertEq(specifiedDelta, 40 ether, "specified should be minAmountOut");
+        assertEq(unspecifiedDelta, -50 ether, "unspecified should be -amountIn");
+
+        // Take call should be for minAmountOut
+        (, , uint256 takeAmount) = mockPM.getTakeCall(0);
+        assertEq(takeAmount, 40 ether, "taker should only pay minAmountOut");
+
+        // Settle should be for amountIn
+        (, uint256 settleAmount) = mockPM.getSettleCall(0);
+        assertEq(settleAmount, 50 ether, "settle should be order.amountIn");
+    }
+
+    // ── Purge expired orders tests ──────────────────────────────────
+
+    function test_purgeExpiredOrders() public {
+        vm.prank(botA);
+        hook.postOrder(poolKey, true, 100 ether, 90 ether, 1); // expires in 1s
+
+        vm.warp(block.timestamp + 2);
+
+        // Anyone can purge
+        hook.purgeExpiredOrders(poolKey, 10);
+
+        // Order should be inactive
+        (,,,,,bool active,) = hook.orders(0);
+        assertFalse(active);
+
+        // Pool orders array should be empty
+        uint256[] memory orderIds = hook.getPoolOrders(poolKey);
+        assertEq(orderIds.length, 0);
+
+        // Tokens should be returned to maker
+        assertEq(token0.balanceOf(address(hook)), 0);
+    }
+
+    // ── C-1: cross-pool token theft prevented ───────────────────────
+
+    function test_cancelOrder_crossPoolTheft_prevented() public {
+        // Deploy additional tokens for a second pool
+        MockToken tokenX = new MockToken("Token X", "TKX", 18);
+        MockToken tokenY = new MockToken("Token Y", "TKY", 18);
+        if (address(tokenX) > address(tokenY)) {
+            (tokenX, tokenY) = (tokenY, tokenX);
+        }
+
+        // Give botA some tokenX, botB some tokenY, fund the hook with tokenX
+        tokenX.mint(botA, 1000 ether);
+        tokenY.mint(botB, 1000 ether);
+
+        vm.prank(botA);
+        tokenX.approve(address(hook), type(uint256).max);
+        vm.prank(botB);
+        tokenY.approve(address(hook), type(uint256).max);
+
+        // Pool 2
+        PoolKey memory poolKey2 = PoolKey({
+            currency0: Currency.wrap(address(tokenX)),
+            currency1: Currency.wrap(address(tokenY)),
+            fee: 3000,
+            tickSpacing: 60,
+            hooks: IHooks(address(hook))
+        });
+
+        // BotA posts in pool1
+        vm.prank(botA);
+        uint256 orderId = hook.postOrder(poolKey, true, 100 ether, 90 ether, 3600);
+
+        // BotA tries to cancel using pool2's key -- should revert
+        vm.prank(botA);
+        vm.expectRevert(Claw2ClawHook.PoolMismatch.selector);
+        hook.cancelOrder(orderId, poolKey2);
     }
 }
