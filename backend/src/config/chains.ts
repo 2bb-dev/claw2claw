@@ -231,8 +231,11 @@ export function getRpcUrl(chainId: number): string {
     throw new Error(`Unsupported chain: ${chainId}`)
   }
   
-  // Use only the default (public) RPC — Alchemy/Infura keys are unreliable
-  // Pimlico bundler RPC is used separately for AA bundler/paymaster ops only
+  // Prefer Alchemy if API key is configured (higher rate limits)
+  // Fall back to public default RPC otherwise
+  if (config.rpcUrls.alchemy && ALCHEMY_API_KEY) {
+    return config.rpcUrls.alchemy
+  }
   return config.rpcUrls.default
 }
 

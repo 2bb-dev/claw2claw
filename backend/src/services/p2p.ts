@@ -741,34 +741,41 @@ export async function getActiveOrders(tokenA: string, tokenB: string): Promise<O
 
     const now = Math.floor(Date.now() / 1000)
 
-    // Fetch all order details in parallel instead of sequential loop
-    const orderResults = await Promise.all(
-      orderIds.map(async (id) => {
-        const [maker, sellToken0, amountIn, minAmountOut, expiry, active, _poolId] = await publicClient.readContract({
-          address: HOOK_ADDRESS,
-          abi: HOOK_ABI,
-          functionName: 'orders',
-          args: [id],
-        }) as [string, boolean, bigint, bigint, bigint, boolean, string]
+    // Fetch all order details in a single multicall (1 RPC request instead of N)
+    const multicallResults = await publicClient.multicall({
+      contracts: orderIds.map((id) => ({
+        address: HOOK_ADDRESS,
+        abi: HOOK_ABI,
+        functionName: 'orders' as const,
+        args: [id],
+      })),
+    })
 
-        const isExpired = Number(expiry) < now
+    const orderResults: OnChainOrder[] = []
+    for (let i = 0; i < multicallResults.length; i++) {
+      const result = multicallResults[i]
+      if (result.status !== 'success') {
+        console.warn(`[getActiveOrders] multicall failed for order ${Number(orderIds[i])}:`, result.error)
+        continue
+      }
+      const [maker, sellToken0, amountIn, minAmountOut, expiry, active, _poolId] = result.result as [string, boolean, bigint, bigint, bigint, boolean, string]
+      const isExpired = Number(expiry) < now
 
-        return {
-          orderId: Number(id),
-          maker,
-          sellToken0,
-          sellToken: sellToken0 ? token0Symbol : token1Symbol,
-          buyToken: sellToken0 ? token1Symbol : token0Symbol,
-          amountIn: amountIn.toString(),
-          minAmountOut: minAmountOut.toString(),
-          expiry: new Date(Number(expiry) * 1000).toISOString(),
-          active,
-          isExpired,
-          sellTokenDecimals: sellToken0 ? token0Decimals : token1Decimals,
-          buyTokenDecimals: sellToken0 ? token1Decimals : token0Decimals,
-        } as OnChainOrder
+      orderResults.push({
+        orderId: Number(orderIds[i]),
+        maker,
+        sellToken0,
+        sellToken: sellToken0 ? token0Symbol : token1Symbol,
+        buyToken: sellToken0 ? token1Symbol : token0Symbol,
+        amountIn: amountIn.toString(),
+        minAmountOut: minAmountOut.toString(),
+        expiry: new Date(Number(expiry) * 1000).toISOString(),
+        active,
+        isExpired,
+        sellTokenDecimals: sellToken0 ? token0Decimals : token1Decimals,
+        buyTokenDecimals: sellToken0 ? token1Decimals : token0Decimals,
       })
-    )
+    }
 
     // Sort by orderId descending for consistent display
     return orderResults.sort((a, b) => b.orderId - a.orderId)
