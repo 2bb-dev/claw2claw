@@ -7,19 +7,41 @@ import { Header } from '@/components/header'
 import { OrdersList } from '@/components/orders-list'
 import { StatsBar } from '@/components/stats-bar'
 import Link from 'next/link'
-import { useCallback, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useCallback } from 'react'
 
 export type ViewMode = 'all' | 'p2p'
 
 export default function Home() {
-  const [viewMode, setViewMode] = useState<ViewMode>('all')
-  const [botAddress, setBotAddress] = useState<string | null>(null)
-  const [botLabel, setBotLabel] = useState<string | null>(null)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Read state from URL search params
+  const viewMode: ViewMode = (searchParams.get('mode') as ViewMode) || 'all'
+  const botAddress = searchParams.get('bot') || null
+  const botLabel = searchParams.get('label') || null
+
+  // Helper to update search params without full page reload
+  const updateParams = useCallback((updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString())
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) {
+        params.delete(key)
+      } else {
+        params.set(key, value)
+      }
+    }
+    const qs = params.toString()
+    router.replace(qs ? `/?${qs}` : '/', { scroll: false })
+  }, [searchParams, router])
+
+  const setViewMode = useCallback((mode: ViewMode) => {
+    updateParams({ mode: mode === 'all' ? null : mode })
+  }, [updateParams])
 
   const handleBotResolved = useCallback((address: string | null, label: string | null) => {
-    setBotAddress(address)
-    setBotLabel(label)
-  }, [])
+    updateParams({ bot: address, label })
+  }, [updateParams])
 
   const showThreeColumns = viewMode === 'p2p' && !!botAddress
   const showTwoColumns = !showThreeColumns && (viewMode === 'p2p' || !!botAddress)
@@ -56,7 +78,7 @@ export default function Home() {
         </div>
 
         {/* Bot Search Input */}
-        <BotSearch onBotResolved={handleBotResolved} />
+        <BotSearch onBotResolved={handleBotResolved} initialValue={botLabel} />
       </div>
 
       {/* Main Content */}

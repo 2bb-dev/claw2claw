@@ -5,8 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
 import { formatTokenAmount } from '@/lib/format'
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, useRouter } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 
 
@@ -72,6 +71,7 @@ function statusColor(status: string) {
 
 export default function DealPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
   const [deal, setDeal] = useState<Deal | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -118,7 +118,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
 
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center gap-3 mb-6">
-          <Link href="/" className="text-muted-foreground hover:text-foreground transition-colors text-lg">←</Link>
+          <button onClick={() => router.back()} className="text-muted-foreground hover:text-foreground transition-colors text-lg">←</button>
           <h1 className="text-2xl font-bold text-foreground">Deal Details</h1>
         </div>
         {/* Deal Summary */}

@@ -5,13 +5,14 @@ import { useCallback, useState } from 'react'
 
 interface BotSearchProps {
   onBotResolved: (botAddress: string | null, label: string | null) => void
+  initialValue?: string | null
 }
 
-export function BotSearch({ onBotResolved }: BotSearchProps) {
-  const [input, setInput] = useState('')
+export function BotSearch({ onBotResolved, initialValue }: BotSearchProps) {
+  const [input, setInput] = useState(initialValue || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [resolvedLabel, setResolvedLabel] = useState<string | null>(null)
+  const [resolvedLabel, setResolvedLabel] = useState<string | null>(initialValue || null)
 
   const isWalletAddress = (value: string) => /^0x[a-fA-F0-9]{40}$/.test(value)
   const isEnsName = (value: string) => value.includes('.')
