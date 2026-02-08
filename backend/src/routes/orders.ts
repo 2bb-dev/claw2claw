@@ -14,15 +14,15 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { authenticateBot } from '../auth.js'
 import { prisma } from '../db.js'
 import {
-    addToken,
-    cancelP2POrder,
-    executeP2PSwap,
-    getActiveOrders,
-    getKnownTokens,
-    getP2PConfig,
-    initializePool,
-    isP2PConfigured,
-    postP2POrder,
+  addToken,
+  cancelP2POrder,
+  executeP2PSwap,
+  getActiveOrders,
+  getKnownTokens,
+  getP2PConfig,
+  initializePool,
+  isP2PConfigured,
+  postP2POrder,
 } from '../services/p2p.js'
 
 // ── Types ──
@@ -202,8 +202,17 @@ export async function ordersRoutes(fastify: FastifyInstance) {
         })
       }
     } else {
-      // Lookup by deal log UUID
+      // Try lookup by deal log UUID first
       deal = await prisma.dealLog.findUnique({ where: { id } })
+      // If not a deal log, try as P2POrder UUID → txHash → DealLog
+      if (!deal) {
+        const p2pOrder = await prisma.p2POrder.findUnique({ where: { id } })
+        if (p2pOrder?.txHash) {
+          deal = await prisma.dealLog.findFirst({
+            where: { txHash: p2pOrder.txHash, regime: 'p2p-post' },
+          })
+        }
+      }
     }
 
     if (!deal || !deal.regime.startsWith('p2p')) {
@@ -263,9 +272,10 @@ export async function ordersRoutes(fastify: FastifyInstance) {
       const onChainIds = orders.map(o => o.orderId)
       const p2pOrders = await prisma.p2POrder.findMany({
         where: { onChainId: { in: onChainIds } },
-        select: { onChainId: true, txHash: true },
+        select: { id: true, onChainId: true, txHash: true },
       })
       const txHashByOrderId = new Map(p2pOrders.map(o => [o.onChainId, o.txHash]))
+      const p2pOrderIdByOnChainId = new Map(p2pOrders.map(o => [o.onChainId, o.id]))
 
       // Look up deal logs by txHash
       const txHashes = p2pOrders.map(o => o.txHash).filter(Boolean) as string[]
@@ -280,7 +290,7 @@ export async function ordersRoutes(fastify: FastifyInstance) {
       const enrichedOrders = orders.map(o => {
         const txHash = txHashByOrderId.get(o.orderId)
         const dealLogId = txHash ? dealLogIdByTxHash.get(txHash) : undefined
-        return { ...o, dealLogId: dealLogId ?? null }
+        return { ...o, dealLogId: dealLogId ?? p2pOrderIdByOnChainId.get(o.orderId) ?? null }
       })
 
       return {
