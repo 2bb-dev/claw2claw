@@ -14,8 +14,8 @@
 import { createWalletClient, encodeFunctionData, erc20Abi, http, maxUint256, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { base } from 'viem/chains'
-import { prisma } from '../db.js'
 import { CHAIN_IDS, getRpcUrl } from '../config/chains.js'
+import { prisma } from '../db.js'
 import { createBlockchainClient, createSponsoredClient } from './wallet.js'
 
 // ── Contract Addresses (Base Mainnet) ──
@@ -435,6 +435,8 @@ export async function postP2POrder(params: PostOrderParams): Promise<PostOrderRe
         duration: params.duration,
         hookAddress: HOOK_ADDRESS,
         sponsored: true,
+        fromTokenDecimals: sellInfo.decimals,
+        toTokenDecimals: buyInfo.decimals,
         pool: { token0: poolKey.currency0, token1: poolKey.currency1 },
       },
     },
@@ -644,6 +646,8 @@ export async function executeP2PSwap(params: MatchOrderParams): Promise<MatchOrd
         routerAddress: SWAP_ROUTER_ADDRESS,
         zeroForOne,
         sponsored: true,
+        fromTokenDecimals: payInfo.decimals,
+        toTokenDecimals: receiveInfo.decimals,
         pool: { token0: poolKey.currency0, token1: poolKey.currency1 },
       },
     },

@@ -52,7 +52,7 @@ async function resolvePendingStatus(deal: {
 // Known token decimals (fallback to 18)
 const TOKEN_DECIMALS: Record<string, number> = {
   ETH: 18, WETH: 18, USDC: 6, USDT: 6, DAI: 18,
-  WBTC: 8, MATIC: 18, AVAX: 18, BNB: 18, ARB: 18, OP: 18,
+  WBTC: 8, CBBTC: 8, MATIC: 18, AVAX: 18, BNB: 18, ARB: 18, OP: 18,
 }
 
 function parseTokenAmount(raw: string | null, symbol: string): number {
@@ -75,8 +75,11 @@ export async function dealsRoutes(fastify: FastifyInstance) {
       ...(botAddress && { where: { botAddress } }),
     })
 
+    // Exclude pending P2P posts — they show as open orders, not deals
+    const filteredDeals = deals.filter(d => !(d.regime === 'p2p-post' && d.status === 'pending'))
+
     // Resolve pending deals' statuses in parallel
-    const pendingDeals = deals.filter(d => d.status === 'pending' && !d.txHash.startsWith('pending-'))
+    const pendingDeals = filteredDeals.filter(d => d.status === 'pending' && !d.txHash.startsWith('pending-'))
     const resolvedStatuses = await Promise.all(
       pendingDeals.map(d => resolvePendingStatus(d))
     )
@@ -96,22 +99,27 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     
     return {
       success: true,
-      deals: deals.map(deal => ({
-        id: deal.id,
-        txHash: deal.txHash,
-        regime: deal.regime,
-        chainId: deal.chainId,
-        fromToken: deal.fromToken,
-        toToken: deal.toToken,
-        fromAmount: deal.fromAmount,
-        toAmount: deal.toAmount,
-        botAddress: deal.botAddress,
-        botEnsName: ensMap.get(deal.botAddress) ?? null,
-        status: statusMap.get(deal.id) ?? deal.status,
-        makerComment: deal.makerComment,
-        takerComment: deal.takerComment,
-        createdAt: deal.createdAt,
-      }))
+      deals: filteredDeals.map(deal => {
+        const meta = (deal.metadata as Record<string, unknown>) ?? {}
+        return {
+          id: deal.id,
+          txHash: deal.txHash,
+          regime: deal.regime,
+          chainId: deal.chainId,
+          fromToken: deal.fromToken,
+          toToken: deal.toToken,
+          fromAmount: deal.fromAmount,
+          toAmount: deal.toAmount ?? (meta.minBuyAmount as string) ?? null,
+          fromTokenDecimals: (meta.fromTokenDecimals as number) ?? TOKEN_DECIMALS[deal.fromToken.toUpperCase()] ?? 18,
+          toTokenDecimals: (meta.toTokenDecimals as number) ?? TOKEN_DECIMALS[deal.toToken.toUpperCase()] ?? 18,
+          botAddress: deal.botAddress,
+          botEnsName: ensMap.get(deal.botAddress) ?? null,
+          status: statusMap.get(deal.id) ?? deal.status,
+          makerComment: deal.makerComment,
+          takerComment: deal.takerComment,
+          createdAt: deal.createdAt,
+        }
+      })
     }
   })
 
@@ -224,6 +232,7 @@ export async function dealsRoutes(fastify: FastifyInstance) {
       include: { botAuth: { select: { ensName: true } } },
     })
     
+    const meta = (deal.metadata as Record<string, unknown>) ?? {}
     return {
       success: true,
       deal: {
@@ -234,7 +243,9 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         fromToken: deal.fromToken,
         toToken: deal.toToken,
         fromAmount: deal.fromAmount,
-        toAmount: deal.toAmount,
+        toAmount: deal.toAmount ?? (meta.minBuyAmount as string) ?? null,
+        fromTokenDecimals: (meta.fromTokenDecimals as number) ?? TOKEN_DECIMALS[deal.fromToken.toUpperCase()] ?? 18,
+        toTokenDecimals: (meta.toTokenDecimals as number) ?? TOKEN_DECIMALS[deal.toToken.toUpperCase()] ?? 18,
         botAddress: deal.botAddress,
         botEnsName: wallet?.botAuth.ensName ?? null,
         status: resolvedStatus,

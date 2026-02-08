@@ -3,30 +3,12 @@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { api } from '@/lib/api'
+import { formatTokenAmount } from '@/lib/format'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
-import { formatUnits } from 'viem'
 
-// Known token decimals (fallback to 18 for unknown tokens)
-const TOKEN_DECIMALS: Record<string, number> = {
-  ETH: 18, WETH: 18, USDC: 6, USDT: 6, DAI: 18,
-  WBTC: 8, MATIC: 18, AVAX: 18, BNB: 18, ARB: 18, OP: 18,
-}
 
-function formatTokenAmount(amount: string, tokenSymbol: string): string {
-  const decimals = TOKEN_DECIMALS[tokenSymbol.toUpperCase()] ?? 18
-  try {
-    const formatted = formatUnits(BigInt(amount), decimals)
-    const num = parseFloat(formatted)
-    if (num === 0) return '0'
-    if (num >= 1000) return num.toLocaleString('en-US', { maximumFractionDigits: 2 })
-    if (num >= 1) return num.toLocaleString('en-US', { maximumFractionDigits: 4 })
-    return num.toPrecision(6).replace(/0+$/, '').replace(/\.$/, '')
-  } catch {
-    return amount
-  }
-}
 
 // Chain explorer base URLs
 const EXPLORER_URLS: Record<number, string> = {
@@ -58,6 +40,8 @@ interface Deal {
   toToken: string
   fromAmount: string
   toAmount: string | null
+  fromTokenDecimals: number
+  toTokenDecimals: number
   botAddress: string
   status: string
   makerComment: string | null
@@ -165,7 +149,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
               <div className="text-center">
                 <div className="text-sm text-muted-foreground mb-1">From</div>
                 <div className="text-3xl font-mono font-bold">
-                  {formatTokenAmount(deal.fromAmount, deal.fromToken)}
+                  {formatTokenAmount(deal.fromAmount, deal.fromTokenDecimals)}
                 </div>
                 <div className="text-lg text-primary font-semibold">{deal.fromToken}</div>
                 <div className="text-xs text-muted-foreground mt-1">{fromChainName}</div>
@@ -174,7 +158,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
               <div className="text-center">
                 <div className="text-sm text-muted-foreground mb-1">To</div>
                 <div className="text-3xl font-mono font-bold">
-                  {deal.toAmount ? formatTokenAmount(deal.toAmount, deal.toToken) : '...'}
+                  {deal.toAmount ? formatTokenAmount(deal.toAmount, deal.toTokenDecimals) : '...'}
                 </div>
                 <div className="text-lg text-primary font-semibold">{deal.toToken}</div>
                 <div className="text-xs text-muted-foreground mt-1">{toChainName}</div>

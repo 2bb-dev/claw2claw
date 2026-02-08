@@ -12,6 +12,7 @@
  */
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { authenticateBot } from '../auth.js'
+import { prisma } from '../db.js'
 import {
   addToken,
   cancelP2POrder,
@@ -174,6 +175,57 @@ export async function ordersRoutes(fastify: FastifyInstance) {
     }
   })
 
+  // GET /api/orders/detail/:id — Get a single P2P order deal by deal log ID (public)
+  fastify.get<{ Params: { id: string } }>('/detail/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params
+
+
+    const deal = await prisma.dealLog.findUnique({ where: { id } })
+
+    if (!deal || !deal.regime.startsWith('p2p')) {
+      return reply.status(404).send({ error: 'Order not found' })
+    }
+
+    const meta = (deal.metadata as Record<string, unknown>) ?? {}
+
+    // Resolve bot ENS name
+    const wallet = await prisma.botWallet.findUnique({
+      where: { walletAddress: deal.botAddress },
+      include: { botAuth: { select: { ensName: true } } },
+    })
+
+    // Known token decimals fallback
+    const TOKEN_DECIMALS: Record<string, number> = {
+      ETH: 18, WETH: 18, USDC: 6, USDT: 6, DAI: 18,
+      WBTC: 8, CBBTC: 8, MATIC: 18, AVAX: 18, BNB: 18,
+    }
+
+    return {
+      success: true,
+      order: {
+        id: deal.id,
+        txHash: deal.txHash,
+        regime: deal.regime,
+        chainId: deal.chainId,
+        fromToken: deal.fromToken,
+        toToken: deal.toToken,
+        fromAmount: deal.fromAmount,
+        toAmount: deal.toAmount ?? (meta.minBuyAmount as string) ?? null,
+        fromTokenDecimals: (meta.fromTokenDecimals as number) ?? TOKEN_DECIMALS[deal.fromToken.toUpperCase()] ?? 18,
+        toTokenDecimals: (meta.toTokenDecimals as number) ?? TOKEN_DECIMALS[deal.toToken.toUpperCase()] ?? 18,
+        orderId: (meta.orderId as number) ?? null,
+        minBuyAmount: (meta.minBuyAmount as string) ?? null,
+        duration: (meta.duration as number) ?? null,
+        botAddress: deal.botAddress,
+        botEnsName: wallet?.botAuth.ensName ?? null,
+        status: deal.status,
+        makerComment: deal.makerComment,
+        takerComment: deal.takerComment,
+        createdAt: deal.createdAt,
+      },
+    }
+  })
+
   // GET /api/orders — List active P2P orders (public, read-only from chain)
   fastify.get<{ Querystring: { tokenA?: string; tokenB?: string } }>('/', async (request: FastifyRequest<{ Querystring: { tokenA?: string; tokenB?: string } }>, reply: FastifyReply) => {
     if (!isP2PConfigured()) {
@@ -188,13 +240,38 @@ export async function ordersRoutes(fastify: FastifyInstance) {
     try {
       const orders = await getActiveOrders(tokenA, tokenB)
 
+      // Enrich with deal log IDs for linking to detail pages
+
+      const onChainIds = orders.map(o => o.orderId)
+      const p2pOrders = await prisma.p2POrder.findMany({
+        where: { onChainId: { in: onChainIds } },
+        select: { onChainId: true, txHash: true },
+      })
+      const txHashByOrderId = new Map(p2pOrders.map(o => [o.onChainId, o.txHash]))
+
+      // Look up deal logs by txHash
+      const txHashes = p2pOrders.map(o => o.txHash).filter(Boolean) as string[]
+      const dealLogs = txHashes.length > 0
+        ? await prisma.dealLog.findMany({
+            where: { txHash: { in: txHashes }, regime: 'p2p-post' },
+            select: { id: true, txHash: true },
+          })
+        : []
+      const dealLogIdByTxHash = new Map(dealLogs.map(d => [d.txHash, d.id]))
+
+      const enrichedOrders = orders.map(o => {
+        const txHash = txHashByOrderId.get(o.orderId)
+        const dealLogId = txHash ? dealLogIdByTxHash.get(txHash) : undefined
+        return { ...o, dealLogId: dealLogId ?? null }
+      })
+
       return {
         success: true,
         pool: {
           tokenA: tokenA || 'WETH',
           tokenB: tokenB || 'USDC',
         },
-        orders,
+        orders: enrichedOrders,
         count: orders.length,
         activeCount: orders.filter(o => o.active && !o.isExpired).length,
       }

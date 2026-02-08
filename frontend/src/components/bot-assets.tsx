@@ -68,7 +68,7 @@ export function BotAssets({ botAddress, botLabel }: BotAssetsProps) {
   if (!botAddress) return null
 
   return (
-    <div className="bg-card border border-border rounded-lg mt-6">
+    <div className="bg-card border border-border rounded-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">

@@ -192,6 +192,8 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
         toChain: params.toChain,
         fromTokenAddress: quote.action.fromToken.address,
         toTokenAddress: quote.action.toToken.address,
+        fromTokenDecimals: quote.action.fromToken.decimals,
+        toTokenDecimals: quote.action.toToken.decimals,
         tool: quote.tool,
         estimatedTime: quote.estimate.executionDuration,
         sponsored: true,

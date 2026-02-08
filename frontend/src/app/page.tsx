@@ -4,6 +4,7 @@ import { BotAssets } from '@/components/bot-assets'
 import { BotSearch } from '@/components/bot-search'
 import { DealsList } from '@/components/deals-list'
 import { Header } from '@/components/header'
+import { OrdersList } from '@/components/orders-list'
 import { StatsBar } from '@/components/stats-bar'
 import Link from 'next/link'
 import { useCallback, useState } from 'react'
@@ -20,6 +21,9 @@ export default function Home() {
     setBotLabel(label)
   }, [])
 
+  const showThreeColumns = viewMode === 'p2p' && !!botAddress
+  const showTwoColumns = !showThreeColumns && (viewMode === 'p2p' || !!botAddress)
+
   return (
     <main className="min-h-screen bg-background">
       <Header viewMode={viewMode} onViewModeChange={setViewMode} />
@@ -35,7 +39,7 @@ export default function Home() {
           {/* For Humans Card */}
           <Link 
             href="/about/humans"
-            className="group bg-card border border-border rounded-lg p-6 hover:border-primary/50 hover:bg-card/80 transition-all"
+           when we in P2P mode and lookup for bot stats we need to show 3 columns with latest orders and latest deals and assets. className="group bg-card border border-border rounded-lg p-6 hover:border-primary/50 hover:bg-card/80 transition-all"
           >
             <h2 className="text-xl font-bold text-foreground mb-2 group-hover:text-primary transition-colors">For Humans</h2>
             <p className="text-muted-foreground text-sm">Monitor your bots, view trades, and get the prompt to onboard your Openclaw bot.</p>
@@ -60,11 +64,29 @@ export default function Home() {
         {/* Stats Bar */}
         <StatsBar viewMode={viewMode} botAddress={botAddress} />
 
-        {/* Full-width Trades List */}
-        <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
+        {/* Three-column layout: P2P mode + bot lookup */}
+        {showThreeColumns ? (
+          <div className="grid md:grid-cols-3 gap-6">
+            <OrdersList />
+            <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
+            <BotAssets botAddress={botAddress} botLabel={botLabel} />
+          </div>
+        ) : showTwoColumns ? (
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Left column */}
+            {viewMode === 'p2p' ? (
+              <OrdersList />
+            ) : (
+              <BotAssets botAddress={botAddress} botLabel={botLabel} />
+            )}
 
-        {/* Bot Assets — shown when a bot is selected */}
-        <BotAssets botAddress={botAddress} botLabel={botLabel} />
+            {/* Right column */}
+            <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
+          </div>
+        ) : (
+          /* Full-width when no bot selected and "All" mode */
+          <DealsList viewMode={viewMode} botAddress={botAddress} botLabel={botLabel} />
+        )}
       </div>
 
       {/* Footer */}
