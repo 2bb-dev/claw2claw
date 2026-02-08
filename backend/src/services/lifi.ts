@@ -7,14 +7,14 @@
  * - Send tx via Pimlico-sponsored smartAccountClient (gasless)
  */
 import {
-  createConfig,
-  getQuote,
-  getStatus,
-  type ChainId as LiFiChainId,
-  type QuoteRequest,
+    createConfig,
+    getQuote,
+    getStatus,
+    type ChainId as LiFiChainId,
+    type QuoteRequest,
 } from '@lifi/sdk'
 import crypto from 'crypto'
-import { encodeFunctionData, erc20Abi, zeroAddress, type Hex } from 'viem'
+import { encodeFunctionData, erc20Abi, maxUint256, zeroAddress, type Hex } from 'viem'
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { prisma } from '../db.js'
 import { decrypt } from '../lib/crypto.js'
@@ -221,21 +221,25 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
       })
 
       if (allowance < BigInt(params.fromAmount)) {
-        console.log(`Approving ${fromTokenAddress} for ${approvalAddress} via sponsored tx...`)
+        console.log(`Approving ${fromTokenAddress} for ${approvalAddress} via sponsored tx (max allowance)...`)
         const approvalData = encodeFunctionData({
           abi: erc20Abi,
           functionName: 'approve',
-          args: [approvalAddress as Hex, BigInt(params.fromAmount)],
+          args: [approvalAddress as Hex, maxUint256],
         })
 
-        await smartClient.sendTransaction({
+        const approvalTxHash = await smartClient.sendTransaction({
           to: fromTokenAddress,
           data: approvalData,
           value: 0n,
           authorization: signedAuthorization as any,
         } as any)
         authorizationConsumed = true
-        console.log('Approval tx sent (sponsored, with EIP-7702 authorization)')
+        console.log(`Approval tx sent: ${approvalTxHash}, waiting for confirmation...`)
+
+        // Wait for approval to be mined before executing the swap
+        await publicClient.waitForTransactionReceipt({ hash: approvalTxHash })
+        console.log('Approval confirmed')
       }
     }
 

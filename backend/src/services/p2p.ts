@@ -16,6 +16,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { base } from 'viem/chains'
 import { CHAIN_IDS, getRpcUrl } from '../config/chains.js'
 import { prisma } from '../db.js'
+import { cached } from './cache.js'
 import { createBlockchainClient, createSponsoredClient } from './wallet.js'
 
 // ── Contract Addresses (Base Mainnet) ──
@@ -709,61 +710,69 @@ export interface OnChainOrder {
  * Read active orders from the hook contract for a specific pool (gas-free, read-only).
  * If no tokens specified, uses WETH/USDC as default.
  */
-export async function getActiveOrders(tokenA?: string, tokenB?: string): Promise<OnChainOrder[]> {
-  const infoA = resolveToken(tokenA || 'WETH')
-  const infoB = resolveToken(tokenB || 'USDC')
-  const poolKey = computePoolKey(infoA.address, infoB.address)
+export async function getActiveOrders(tokenA: string, tokenB: string): Promise<OnChainOrder[]> {
+  const symA = tokenA.toUpperCase()
+  const symB = tokenB.toUpperCase()
+  const cacheKey = `p2p:orders:${symA}:${symB}`
 
-  const token0Info = TOKEN_BY_ADDRESS[poolKey.currency0.toLowerCase()]
-  const token1Info = TOKEN_BY_ADDRESS[poolKey.currency1.toLowerCase()]
-  const token0Symbol = token0Info?.symbol || poolKey.currency0
-  const token1Symbol = token1Info?.symbol || poolKey.currency1
-  const token0Decimals = token0Info?.decimals ?? 18
-  const token1Decimals = token1Info?.decimals ?? 18
+  return cached(cacheKey, 10, async () => {
+    const infoA = resolveToken(symA)
+    const infoB = resolveToken(symB)
+    const poolKey = computePoolKey(infoA.address, infoB.address)
 
-  const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
+    const token0Info = TOKEN_BY_ADDRESS[poolKey.currency0.toLowerCase()]
+    const token1Info = TOKEN_BY_ADDRESS[poolKey.currency1.toLowerCase()]
+    const token0Symbol = token0Info?.symbol || poolKey.currency0
+    const token1Symbol = token1Info?.symbol || poolKey.currency1
+    const token0Decimals = token0Info?.decimals ?? 18
+    const token1Decimals = token1Info?.decimals ?? 18
 
-  // Get all order IDs for this pool
-  const orderIds = await publicClient.readContract({
-    address: HOOK_ADDRESS,
-    abi: HOOK_ABI,
-    functionName: 'getPoolOrders',
-    args: [poolKey],
-  }) as bigint[]
+    const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
 
-  if (orderIds.length === 0) return []
-
-  // Fetch each order's details
-  const orders: OnChainOrder[] = []
-  const now = Math.floor(Date.now() / 1000)
-
-  for (const id of orderIds) {
-    const [maker, sellToken0, amountIn, minAmountOut, expiry, active, _poolId] = await publicClient.readContract({
+    // Get all order IDs for this pool
+    const orderIds = await publicClient.readContract({
       address: HOOK_ADDRESS,
       abi: HOOK_ABI,
-      functionName: 'orders',
-      args: [id],
-    }) as [string, boolean, bigint, bigint, bigint, boolean, string]
+      functionName: 'getPoolOrders',
+      args: [poolKey],
+    }) as bigint[]
 
-    const isExpired = Number(expiry) < now
+    if (orderIds.length === 0) return []
 
-    orders.push({
-      orderId: Number(id),
-      maker,
-      sellToken0,
-      sellToken: sellToken0 ? token0Symbol : token1Symbol,
-      buyToken: sellToken0 ? token1Symbol : token0Symbol,
-      amountIn: amountIn.toString(),
-      minAmountOut: minAmountOut.toString(),
-      expiry: new Date(Number(expiry) * 1000).toISOString(),
-      active,
-      isExpired,
-      sellTokenDecimals: sellToken0 ? token0Decimals : token1Decimals,
-      buyTokenDecimals: sellToken0 ? token1Decimals : token0Decimals,
-    })
-  }
+    const now = Math.floor(Date.now() / 1000)
 
-  return orders
+    // Fetch all order details in parallel instead of sequential loop
+    const orderResults = await Promise.all(
+      orderIds.map(async (id) => {
+        const [maker, sellToken0, amountIn, minAmountOut, expiry, active, _poolId] = await publicClient.readContract({
+          address: HOOK_ADDRESS,
+          abi: HOOK_ABI,
+          functionName: 'orders',
+          args: [id],
+        }) as [string, boolean, bigint, bigint, bigint, boolean, string]
+
+        const isExpired = Number(expiry) < now
+
+        return {
+          orderId: Number(id),
+          maker,
+          sellToken0,
+          sellToken: sellToken0 ? token0Symbol : token1Symbol,
+          buyToken: sellToken0 ? token1Symbol : token0Symbol,
+          amountIn: amountIn.toString(),
+          minAmountOut: minAmountOut.toString(),
+          expiry: new Date(Number(expiry) * 1000).toISOString(),
+          active,
+          isExpired,
+          sellTokenDecimals: sellToken0 ? token0Decimals : token1Decimals,
+          buyTokenDecimals: sellToken0 ? token1Decimals : token0Decimals,
+        } as OnChainOrder
+      })
+    )
+
+    // Sort by orderId descending for consistent display
+    return orderResults.sort((a, b) => b.orderId - a.orderId)
+  })
 }
 
 /**
@@ -771,48 +780,55 @@ export async function getActiveOrders(tokenA?: string, tokenB?: string): Promise
  * Discovers pools from DB records, then queries each on-chain.
  */
 export async function getAllActiveOrders(): Promise<OnChainOrder[]> {
-  // Get distinct pool pairs from DB
-  const dbOrders = await prisma.p2POrder.findMany({
-    where: { status: 'active' },
-    select: { poolKey: true },
-  })
+  return cached('p2p:orders:all', 10, async () => {
+    // Get distinct pool pairs from DB
+    const dbOrders = await prisma.p2POrder.findMany({
+      where: { status: 'active' },
+      select: { poolKey: true },
+    })
 
-  // Extract unique token pairs from poolKey JSON
-  const poolPairs = new Map<string, { tokenA: string; tokenB: string }>()
-  for (const o of dbOrders) {
-    const pk = o.poolKey as Record<string, string>
-    if (pk?.currency0 && pk?.currency1) {
-      const key = `${pk.currency0.toLowerCase()}-${pk.currency1.toLowerCase()}`
-      if (!poolPairs.has(key)) {
-        // Resolve to symbols
-        const t0 = TOKEN_BY_ADDRESS[pk.currency0.toLowerCase()]
-        const t1 = TOKEN_BY_ADDRESS[pk.currency1.toLowerCase()]
-        if (t0 && t1) {
-          poolPairs.set(key, { tokenA: t0.symbol, tokenB: t1.symbol })
+    // Extract unique token pairs from poolKey JSON
+    const poolPairs = new Map<string, { tokenA: string; tokenB: string }>()
+    for (const o of dbOrders) {
+      const pk = o.poolKey as Record<string, string>
+      if (pk?.currency0 && pk?.currency1) {
+        const key = `${pk.currency0.toLowerCase()}-${pk.currency1.toLowerCase()}`
+        if (!poolPairs.has(key)) {
+          const t0 = TOKEN_BY_ADDRESS[pk.currency0.toLowerCase()]
+          const t1 = TOKEN_BY_ADDRESS[pk.currency1.toLowerCase()]
+          if (t0 && t1) {
+            poolPairs.set(key, { tokenA: t0.symbol, tokenB: t1.symbol })
+          }
         }
       }
     }
-  }
 
-  const allOrders: OnChainOrder[] = []
-  const seenOrderIds = new Set<number>()
+    // Query all pools in parallel (each pool call is itself cached)
+    const poolResults = await Promise.all(
+      [...poolPairs.values()].map(async ({ tokenA, tokenB }) => {
+        try {
+          return await getActiveOrders(tokenA, tokenB)
+        } catch (err) {
+          console.warn(`[getAllActiveOrders] Failed to query pool ${tokenA}/${tokenB}:`, err)
+          return []
+        }
+      })
+    )
 
-  // Query each known pool sequentially (avoids RPC rate limits)
-  for (const { tokenA, tokenB } of poolPairs.values()) {
-    try {
-      const orders = await getActiveOrders(tokenA, tokenB)
+    // Deduplicate and sort by orderId descending
+    const seenOrderIds = new Set<number>()
+    const allOrders: OnChainOrder[] = []
+    for (const orders of poolResults) {
       for (const order of orders) {
         if (!seenOrderIds.has(order.orderId)) {
           seenOrderIds.add(order.orderId)
           allOrders.push(order)
         }
       }
-    } catch (err) {
-      console.warn(`[getAllActiveOrders] Failed to query pool ${tokenA}/${tokenB}:`, err)
     }
-  }
 
-  return allOrders
+    return allOrders.sort((a, b) => b.orderId - a.orderId)
+  })
 }
 
 

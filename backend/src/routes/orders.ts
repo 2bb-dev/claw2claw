@@ -267,7 +267,7 @@ export async function ordersRoutes(fastify: FastifyInstance) {
 
     try {
       // If specific pool requested, query that pool; otherwise query ALL pools
-      const orders = (tokenA || tokenB)
+      const orders = (tokenA && tokenB)
         ? await getActiveOrders(tokenA, tokenB)
         : await getAllActiveOrders()
 
