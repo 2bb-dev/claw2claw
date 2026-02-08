@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "prebuild": "node scripts/generate-skill.js",
-    "build": "next build --no-turbopack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
