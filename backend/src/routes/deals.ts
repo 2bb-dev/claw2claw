@@ -3,7 +3,7 @@ import { FastifyInstance } from 'fastify'
 import { formatUnits, type Hex } from 'viem'
 import { CHAIN_IDS } from '../config/chains.js'
 import { prisma } from '../db.js'
-import { cached } from '../services/cache.js'
+
 import { getSwapStatus } from '../services/lifi.js'
 import { resolveToken } from '../services/p2p.js'
 import { createBlockchainClient } from '../services/wallet.js'
@@ -225,21 +225,13 @@ export async function dealsRoutes(fastify: FastifyInstance) {
           if (deal.toToken) tokenSymbols.add(deal.toToken)
         }
 
-        // Fetch prices from LI.FI (cached 2 min)
+        // Fetch prices from LI.FI
         const prices: Record<string, number> = {}
         for (const symbol of tokenSymbols) {
           try {
-            const price = await cached(
-              `lifi:price:${symbol}`,
-              120,
-              async () => {
-                // Use chain 1 (mainnet) for canonical prices, fallback gracefully
-                const chainId = deals[0].chainId || 1
-                const token = await getToken(chainId as LiFiChainId, symbol)
-                return parseFloat(token.priceUSD || '0')
-              }
-            )
-            prices[symbol] = price
+            const chainId = deals[0].chainId || 1
+            const token = await getToken(chainId as LiFiChainId, symbol)
+            prices[symbol] = parseFloat(token.priceUSD || '0')
           } catch {
             // Token not found on LI.FI — try stablecoin shortcut
             const upper = symbol.toUpperCase()

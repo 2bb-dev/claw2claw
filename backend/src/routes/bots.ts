@@ -65,12 +65,14 @@ export async function botsRoutes(fastify: FastifyInstance) {
     const ensName: string | null = bot.ensName || null
 
     const [balanceResult, ensResult] = await Promise.allSettled([
-      // LI.FI multi-chain portfolio
+      // LI.FI multi-chain portfolio (fresh data, API key handles rate limits)
       walletAddress
-        ? cached(`lifi:balances:${walletAddress}`, 60, () => getWalletBalances(walletAddress))
+        ? getWalletBalances(walletAddress)
         : Promise.resolve(null),
-      // ENS on-chain profile
-      ensName ? getBotProfile(ensName) : Promise.resolve(null),
+      // ENS on-chain profile (cached 5 min — rarely changes)
+      ensName
+        ? cached(`ens:profile:${ensName}`, 300, () => getBotProfile(ensName))
+        : Promise.resolve(null),
     ])
 
     // Process wallet balances
@@ -318,11 +320,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const balancesByChain = await cached(
-        `lifi:balances:${address}`,
-        60, // 1 minute cache
-        () => getWalletBalances(address)
-      ) as Record<number, any[]>
+      const balancesByChain = await getWalletBalances(address) as Record<number, any[]>
 
       // Flatten all chains into a single sorted list
       const assets: {

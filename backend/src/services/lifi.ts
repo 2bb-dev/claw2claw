@@ -18,7 +18,7 @@ import { encodeFunctionData, erc20Abi, maxUint256, zeroAddress, type Hex } from 
 import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { prisma } from '../db.js'
 import { decrypt } from '../lib/crypto.js'
-import { cached } from './cache.js'
+
 import { createBlockchainClient, createSponsoredClient } from './wallet.js'
 
 
@@ -30,12 +30,14 @@ import { createBlockchainClient, createSponsoredClient } from './wallet.js'
  */
 export function initLiFi(): void {
   const integrator = process.env.LIFI_INTEGRATOR || 'claw2claw'
+  const apiKey = process.env.LIFI_API_KEY || undefined
 
   createConfig({
     integrator,
+    apiKey,
   })
 
-  console.log(`LI.FI SDK initialized (integrator: ${integrator})`)
+  console.log(`LI.FI SDK initialized (integrator: ${integrator}, apiKey: ${apiKey ? 'set' : 'not set'})`)
 }
 
 // No EVM provider needed — we manually extract transactionRequest from quotes
@@ -77,45 +79,41 @@ export interface SwapQuoteResult {
 }
 
 /**
- * Get a swap/bridge quote from LI.FI (cached 15s)
+ * Get a swap/bridge quote from LI.FI
  */
 export async function getLiFiQuote(params: SwapQuoteParams): Promise<SwapQuoteResult> {
-  const cacheKey = `lifi:quote:${params.fromChain}:${params.toChain}:${params.fromToken}:${params.toToken}:${params.fromAmount}`
+  const quoteRequest: QuoteRequest = {
+    fromChain: params.fromChain as LiFiChainId,
+    toChain: params.toChain as LiFiChainId,
+    fromToken: params.fromToken,
+    toToken: params.toToken,
+    fromAmount: params.fromAmount,
+    fromAddress: params.fromAddress,
+  }
 
-  return cached(cacheKey, 15, async () => {
-    const quoteRequest: QuoteRequest = {
-      fromChain: params.fromChain as LiFiChainId,
-      toChain: params.toChain as LiFiChainId,
-      fromToken: params.fromToken,
-      toToken: params.toToken,
-      fromAmount: params.fromAmount,
-      fromAddress: params.fromAddress,
-    }
+  const quote = await getQuote(quoteRequest)
 
-    const quote = await getQuote(quoteRequest)
-
-    return {
-      id: quote.id,
-      fromChain: params.fromChain,
-      toChain: params.toChain,
-      fromToken: {
-        address: quote.action.fromToken.address,
-        symbol: quote.action.fromToken.symbol,
-        decimals: quote.action.fromToken.decimals,
-      },
-      toToken: {
-        address: quote.action.toToken.address,
-        symbol: quote.action.toToken.symbol,
-        decimals: quote.action.toToken.decimals,
-      },
-      fromAmount: quote.action.fromAmount,
-      toAmount: quote.estimate.toAmount,
-      estimatedGas: quote.estimate.gasCosts?.[0]?.amount ?? '0',
-      estimatedTime: quote.estimate.executionDuration,
-      toolsUsed: [quote.toolDetails?.name ?? quote.tool].filter(Boolean),
-      isCrossChain: params.fromChain !== params.toChain,
-    }
-  })
+  return {
+    id: quote.id,
+    fromChain: params.fromChain,
+    toChain: params.toChain,
+    fromToken: {
+      address: quote.action.fromToken.address,
+      symbol: quote.action.fromToken.symbol,
+      decimals: quote.action.fromToken.decimals,
+    },
+    toToken: {
+      address: quote.action.toToken.address,
+      symbol: quote.action.toToken.symbol,
+      decimals: quote.action.toToken.decimals,
+    },
+    fromAmount: quote.action.fromAmount,
+    toAmount: quote.estimate.toAmount,
+    estimatedGas: quote.estimate.gasCosts?.[0]?.amount ?? '0',
+    estimatedTime: quote.estimate.executionDuration,
+    toolsUsed: [quote.toolDetails?.name ?? quote.tool].filter(Boolean),
+    isCrossChain: params.fromChain !== params.toChain,
+  }
 }
 
 export interface SwapExecuteParams {
@@ -296,25 +294,21 @@ export async function executeLiFiSwap(params: SwapExecuteParams): Promise<SwapEx
  * Get status of a cross-chain transfer
  */
 export async function getSwapStatus(txHash: string, fromChain: number, toChain: number) {
-  const cacheKey = `lifi:status:${txHash}`
-
-  return cached(cacheKey, 10, async () => {
-    const status = await getStatus({
-      txHash,
-      fromChain: fromChain as LiFiChainId,
-      toChain: toChain as LiFiChainId,
-    })
-
-    return {
-      txHash,
-      status: status.status,
-      substatus: status.substatus,
-      fromChain,
-      toChain,
-      sending: status.sending,
-      receiving: 'receiving' in status ? (status as any).receiving : undefined,
-    }
+  const status = await getStatus({
+    txHash,
+    fromChain: fromChain as LiFiChainId,
+    toChain: toChain as LiFiChainId,
   })
+
+  return {
+    txHash,
+    status: status.status,
+    substatus: status.substatus,
+    fromChain,
+    toChain,
+    sending: status.sending,
+    receiving: 'receiving' in status ? (status as any).receiving : undefined,
+  }
 }
 
 // ── Withdraw API ──
