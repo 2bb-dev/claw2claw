@@ -359,11 +359,26 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     // Resolve maker/taker addresses for P2P deals
     let makerAddress: string | null = null
     let takerAddress: string | null = null
+    let resolvedMakerComment: string | null = deal.makerComment
+    let resolvedTakerComment: string | null = deal.takerComment
 
     if (deal.regime === 'p2p-post') {
       // Maker posted this order
       makerAddress = deal.botAddress
       takerAddress = (meta.matchedBy as string) ?? null
+      // Taker's comment lives on the taker's p2p deal row
+      if (meta.matchTxHash && !resolvedTakerComment) {
+        try {
+          const takerDeal = await prisma.dealLog.findFirst({
+            where: { txHash: meta.matchTxHash as string, regime: 'p2p' },
+          })
+          if (takerDeal?.takerComment) {
+            resolvedTakerComment = takerDeal.takerComment
+          }
+        } catch (err) {
+          console.error(`[deals] Failed to resolve taker comment for deal ${deal.id}:`, err)
+        }
+      }
     } else if (deal.regime === 'p2p') {
       // Taker executed this swap
       takerAddress = deal.botAddress
@@ -374,10 +389,38 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         })
         if (matchedOrder) {
           makerAddress = matchedOrder.maker
+          // Maker's comment lives on the maker's p2p-post deal row
+          if (!resolvedMakerComment && matchedOrder.txHash) {
+            const makerDeal = await prisma.dealLog.findFirst({
+              where: { txHash: matchedOrder.txHash, regime: 'p2p-post' },
+            })
+            if (makerDeal?.makerComment) {
+              resolvedMakerComment = makerDeal.makerComment
+            }
+          }
         }
       } catch (err) {
         console.error(`[deals] Failed to resolve maker address for deal ${deal.id}:`, err)
       }
+    }
+
+    // Resolve maker/taker ENS names via BotWallet → BotAuth
+    let makerEnsName: string | null = null
+    let takerEnsName: string | null = null
+
+    const addressesToResolve = [makerAddress, takerAddress].filter(Boolean) as string[]
+    if (addressesToResolve.length > 0) {
+      const wallets = await prisma.botWallet.findMany({
+        where: { walletAddress: { in: addressesToResolve } },
+        include: { botAuth: { select: { ensName: true } } },
+      })
+      const ensMap = new Map(
+        wallets
+          .filter(w => w.botAuth.ensName)
+          .map(w => [w.walletAddress.toLowerCase(), w.botAuth.ensName!])
+      )
+      if (makerAddress) makerEnsName = ensMap.get(makerAddress.toLowerCase()) ?? null
+      if (takerAddress) takerEnsName = ensMap.get(takerAddress.toLowerCase()) ?? null
     }
 
     return {
@@ -397,9 +440,11 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         botEnsName: wallet?.botAuth.ensName ?? null,
         makerAddress,
         takerAddress,
+        makerEnsName,
+        takerEnsName,
         status: resolvedStatus,
-        makerComment: deal.makerComment,
-        takerComment: deal.takerComment,
+        makerComment: resolvedMakerComment,
+        takerComment: resolvedTakerComment,
         metadata: deal.metadata,
         createdAt: deal.createdAt,
       }

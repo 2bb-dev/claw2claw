@@ -46,6 +46,8 @@ interface Deal {
   status: string
   makerAddress: string | null
   takerAddress: string | null
+  makerEnsName: string | null
+  takerEnsName: string | null
   makerComment: string | null
   takerComment: string | null
   metadata: Record<string, unknown> | null
@@ -111,7 +113,6 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
   const toChainName = CHAIN_NAMES[toChainId] ?? `Chain ${toChainId}`
   const isCrossChain = deal.chainId !== toChainId
   const txUrl = explorerBase ? `${explorerBase}/tx/${deal.txHash}` : null
-  const addressUrl = explorerBase ? `${explorerBase}/address/${deal.botAddress}` : null
   const isPending = deal.txHash.startsWith('pending-')
 
   return (
@@ -161,25 +162,10 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
             </div>
 
             {/* Metadata row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-border">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Created At</div>
                 <div className="text-sm font-mono">{new Date(deal.createdAt).toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Bot Address</div>
-                {addressUrl ? (
-                  <a
-                    href={addressUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-mono text-sm text-primary hover:underline"
-                  >
-                    {truncateAddress(deal.botAddress)}
-                  </a>
-                ) : (
-                  <p className="font-mono text-sm">{truncateAddress(deal.botAddress)}</p>
-                )}
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Transaction</div>
@@ -210,7 +196,7 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
               <div className={`grid gap-6 ${deal.makerAddress && deal.takerAddress ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
                 {deal.makerAddress && (
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">Maker Address</div>
+                    <div className="text-xs text-muted-foreground mb-1">Maker</div>
                     {explorerBase ? (
                       <a
                         href={`${explorerBase}/address/${deal.makerAddress}`}
@@ -218,16 +204,16 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
                         rel="noopener noreferrer"
                         className="font-mono text-sm text-primary hover:underline"
                       >
-                        {truncateAddress(deal.makerAddress)}
+                        {deal.makerEnsName || truncateAddress(deal.makerAddress)}
                       </a>
                     ) : (
-                      <p className="font-mono text-sm">{truncateAddress(deal.makerAddress)}</p>
+                      <p className="font-mono text-sm">{deal.makerEnsName || truncateAddress(deal.makerAddress)}</p>
                     )}
                   </div>
                 )}
                 {deal.takerAddress && (
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">Taker Address</div>
+                    <div className="text-xs text-muted-foreground mb-1">Taker</div>
                     {explorerBase ? (
                       <a
                         href={`${explorerBase}/address/${deal.takerAddress}`}
@@ -235,10 +221,10 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
                         rel="noopener noreferrer"
                         className="font-mono text-sm text-primary hover:underline"
                       >
-                        {truncateAddress(deal.takerAddress)}
+                        {deal.takerEnsName || truncateAddress(deal.takerAddress)}
                       </a>
                     ) : (
-                      <p className="font-mono text-sm">{truncateAddress(deal.takerAddress)}</p>
+                      <p className="font-mono text-sm">{deal.takerEnsName || truncateAddress(deal.takerAddress)}</p>
                     )}
                   </div>
                 )}
