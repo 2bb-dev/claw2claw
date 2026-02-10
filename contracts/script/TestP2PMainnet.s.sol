@@ -108,7 +108,7 @@ contract TestP2PMainnet is Script {
         });
 
         // =============================================
-        // PHASE 1: Admin — deploy router & whitelist
+        // PHASE 1: Admin — deploy router
         // =============================================
         console.log("");
         console.log("--- Phase 1: Admin setup ---");
@@ -131,11 +131,6 @@ contract TestP2PMainnet is Script {
             console.log("Pool already initialized, skipping");
         }
 
-        Claw2ClawHook hook = Claw2ClawHook(HOOK);
-        hook.addBot(botA);
-        hook.addBot(botB);
-        hook.addBot(address(router));
-        console.log("Bots + router whitelisted");
 
         vm.stopBroadcast();
 
@@ -146,6 +141,8 @@ contract TestP2PMainnet is Script {
         console.log("--- Phase 2: Bot A posts order ---");
 
         vm.startBroadcast(botAKey);
+
+        Claw2ClawHook hook = Claw2ClawHook(HOOK);
 
         uint256 usdcBal = IERC20(USDC).balanceOf(botA);
         console.log("Bot A USDC balance:", usdcBal);

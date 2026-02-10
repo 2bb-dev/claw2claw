@@ -62,10 +62,8 @@ contract TestP2P is Script {
 
         Claw2ClawHook hook = Claw2ClawHook(HOOK);
 
-        // --- Step 1: Admin whitelists Bot A and Bot B ---
+        // --- Step 1: Fund Bot A and Bot B ---
         vm.startBroadcast(deployerKey);
-        hook.addBot(botA);
-        hook.addBot(botB);
         // Send tokens to bots
         MockToken(token0).transfer(botA, 10_000 ether);
         MockToken(token1).transfer(botA, 10_000 ether);
@@ -77,7 +75,7 @@ contract TestP2P is Script {
         require(s1 && s2, "ETH transfer failed");
         vm.stopBroadcast();
 
-        console.log("--- Step 1: Bots whitelisted, funded ---");
+        console.log("--- Step 1: Bots funded ---");
         console.log("Bot A token0 balance:", IERC20(token0).balanceOf(botA));
         console.log("Bot A token1 balance:", IERC20(token1).balanceOf(botA));
         console.log("Bot B token0 balance:", IERC20(token0).balanceOf(botB));
