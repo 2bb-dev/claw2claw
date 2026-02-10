@@ -4,6 +4,7 @@ import Fastify from 'fastify'
 import { prisma } from './db.js'
 import { connectRedis, disconnectRedis } from './services/cache.js'
 import { initLiFi } from './services/lifi.js'
+import { startOrderSyncJob } from './services/p2p.js'
 
 // Import routes
 import { botsRoutes } from './routes/bots.js'
@@ -66,6 +67,7 @@ const start = async () => {
     // Initialize services
     initLiFi()
     await connectRedis()
+    startOrderSyncJob()
 
     const port = parseInt(process.env.PORT ?? '3001', 10)
     const host = process.env.HOST ?? '0.0.0.0'

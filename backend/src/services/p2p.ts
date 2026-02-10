@@ -18,6 +18,7 @@ import { CHAIN_IDS, getRpcUrl } from '../config/chains.js'
 import { prisma } from '../db.js'
 import { cached } from './cache.js'
 import { createBlockchainClient, createSponsoredClient } from './wallet.js'
+import cron from 'node-cron'
 
 // ── Contract Addresses (Base Mainnet) ──
 
@@ -1091,4 +1092,112 @@ export function getP2PConfig() {
       name: t.name,
     })),
   }
+}
+
+/**
+ * Sync DB order statuses against on-chain reality.
+ * Takes a list of "active" DB orders, multicalls on-chain, updates stale ones,
+ * and returns only the truly active orders.
+ *
+ * Self-healing: called from /me so stale orders get cleaned up on read.
+ */
+export async function syncOrderStatuses<T extends { id: string; onChainId: number; expiry: Date; txHash: string | null }>(
+  dbOrders: T[]
+): Promise<T[]> {
+  if (dbOrders.length === 0) return []
+
+  const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
+
+  const [orderChecks, block] = await Promise.all([
+    publicClient.multicall({
+      contracts: dbOrders.map((o) => ({
+        address: HOOK_ADDRESS,
+        abi: HOOK_ABI,
+        functionName: 'orders' as const,
+        args: [BigInt(o.onChainId)],
+      })),
+    }),
+    publicClient.getBlock({ blockTag: 'latest' }),
+  ])
+
+  const chainNow = Number(block.timestamp)
+  const stillActive: typeof dbOrders = []
+
+  for (let i = 0; i < orderChecks.length; i++) {
+    const result = orderChecks[i]
+    const dbOrder = dbOrders[i]
+
+    if (result.status !== 'success') {
+      // RPC error for this order — keep it in the list (don't silently drop)
+      stillActive.push(dbOrder)
+      continue
+    }
+
+    const [, , , , , active] = result.result as [string, boolean, bigint, bigint, bigint, boolean, string]
+
+    if (active) {
+      stillActive.push(dbOrder)
+    } else {
+      // Order is no longer active on-chain — update DB
+      const isExpired = dbOrder.expiry.getTime() / 1000 < chainNow
+      const newStatus = isExpired ? 'expired' : 'filled'
+
+      await prisma.p2POrder.update({
+        where: { id: dbOrder.id },
+        data: { status: newStatus },
+      })
+
+      // Update maker's DealLog if it was filled
+      if (newStatus === 'filled' && dbOrder.txHash) {
+        const makerDeal = await prisma.dealLog.findFirst({
+          where: { txHash: dbOrder.txHash, regime: 'p2p-post', status: 'pending' },
+        })
+        if (makerDeal) {
+          const existingMeta = (makerDeal.metadata as Record<string, unknown>) ?? {}
+          await prisma.dealLog.update({
+            where: { id: makerDeal.id },
+            data: {
+              status: 'completed',
+              metadata: { ...existingMeta, syncedAt: new Date().toISOString() },
+            },
+          })
+        }
+      }
+
+      console.log(`[P2P] Order #${dbOrder.onChainId} synced → ${newStatus}`)
+    }
+  }
+
+  return stillActive
+}
+
+
+/**
+ * Background cron: sync all DB "active" orders against on-chain every 5 min.
+ * Cleans stale orders (filled/expired) so bots and the frontend see accurate state.
+ */
+export function startOrderSyncJob() {
+  const run = async () => {
+    try {
+      const activeOrders = await prisma.p2POrder.findMany({
+        where: { status: 'active' },
+      })
+
+      if (activeOrders.length === 0) return
+
+      console.log(`[P2P] Syncing ${activeOrders.length} active orders against on-chain…`)
+      const stillActive = await syncOrderStatuses(activeOrders)
+      const cleaned = activeOrders.length - stillActive.length
+
+      if (cleaned > 0) {
+        console.log(`[P2P] Cleaned ${cleaned} stale orders (${stillActive.length} still active)`)
+      }
+    } catch (err) {
+      console.error('[P2P] Order sync job error:', err)
+    }
+  }
+
+  // Cron: every 5 minutes
+  cron.schedule('*/5 * * * *', run)
+  console.log('[P2P] Order sync cron started (*/5 * * * *)')
 }

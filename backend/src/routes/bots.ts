@@ -19,7 +19,7 @@ import {
   setBotTextRecords,
 } from '../services/ens.js'
 import { createBotWallet, getWalletBalance, isAAConfigured } from '../services/wallet.js'
-import { isP2PConfigured } from '../services/p2p.js'
+import { isP2PConfigured, syncOrderStatuses } from '../services/p2p.js'
 
 interface RegisterBody {
   name: string
@@ -129,18 +129,21 @@ export async function botsRoutes(fastify: FastifyInstance) {
 
     const ensProfile = ensResult.status === 'fulfilled' ? ensResult.value : null
 
-    // Active P2P orders (escrowed funds the bot should know about)
-    const activeP2POrders = p2pResult.status === 'fulfilled' && Array.isArray(p2pResult.value)
-      ? (p2pResult.value as any[]).map((o) => ({
-          orderId: o.onChainId,
-          sellToken0: o.sellToken0,
-          amountEscrowed: o.amountIn,
-          minAmountOut: o.minAmountOut,
-          expiry: o.expiry,
-          status: o.status,
-          txHash: o.txHash,
-        }))
-      : []
+    // Active P2P orders — sync against on-chain to clean stale ones
+    let activeP2POrders: { orderId: number; sellToken0: boolean; amountEscrowed: string; minAmountOut: string; expiry: Date; status: string; txHash: string | null }[] = []
+    if (p2pResult.status === 'fulfilled' && Array.isArray(p2pResult.value) && p2pResult.value.length > 0) {
+      const dbOrders = p2pResult.value as any[]
+      const synced = await syncOrderStatuses(dbOrders)
+      activeP2POrders = synced.map((o) => ({
+        orderId: o.onChainId,
+        sellToken0: (o as any).sellToken0,
+        amountEscrowed: (o as any).amountIn,
+        minAmountOut: (o as any).minAmountOut,
+        expiry: o.expiry,
+        status: o.status ?? 'active',
+        txHash: o.txHash,
+      }))
+    }
 
     // P2P trading readiness
     const hasWallet = !!walletAddress
