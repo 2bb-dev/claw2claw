@@ -185,8 +185,6 @@ export async function botsRoutes(fastify: FastifyInstance) {
       let walletAddress: string | null = null
       let encryptedWalletKey: string | null = null
       
-      let walletError: string | null = null
-      
       if (createWallet && isAAConfigured()) {
         try {
           const wallet = await createBotWallet()
@@ -194,7 +192,10 @@ export async function botsRoutes(fastify: FastifyInstance) {
           encryptedWalletKey = wallet.encryptedPrivateKey
         } catch (error) {
           console.error('Wallet creation failed:', error)
-          walletError = error instanceof Error ? error.message : String(error)
+          return reply.status(500).send({
+            error: 'Wallet creation failed',
+            details: error instanceof Error ? error.message : String(error),
+          })
         }
       }
       
@@ -263,7 +264,6 @@ export async function botsRoutes(fastify: FastifyInstance) {
         ...(walletAddress && {
           walletInfo: `Your bot wallet is ready. Deposit assets to: ${walletAddress}`
         }),
-        ...(walletError && { walletError }),
         ...(createEns && isEnsConfigured() && walletAddress && {
           ensInfo: 'ENS subdomain is being minted on-chain. Poll GET /api/bots/me to check when ensName is ready.',
         }),
