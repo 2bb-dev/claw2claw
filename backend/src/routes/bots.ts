@@ -60,75 +60,63 @@ export async function botsRoutes(fastify: FastifyInstance) {
       })
     }
     
-    // Get full multi-chain portfolio via LI.FI (same as /assets/:address)
+    // Fetch wallet balances and ENS profile in parallel
+    const walletAddress = bot.wallet?.walletAddress
+    const ensName: string | null = bot.ensName || null
+
+    const [balanceResult, ensResult] = await Promise.allSettled([
+      // LI.FI multi-chain portfolio
+      walletAddress
+        ? cached(`lifi:balances:${walletAddress}`, 60, () => getWalletBalances(walletAddress))
+        : Promise.resolve(null),
+      // ENS on-chain profile
+      ensName ? getBotProfile(ensName) : Promise.resolve(null),
+    ])
+
+    // Process wallet balances
     let walletBalance: {
       totalUSD: number
       assets: {
-        chainId: number
-        symbol: string
-        name: string
-        amount: string
-        amountFormatted: string
-        priceUSD: string
-        valueUSD: number
-        logoURI?: string
-        decimals: number
+        chainId: number; symbol: string; name: string; amount: string;
+        amountFormatted: string; priceUSD: string; valueUSD: number;
+        logoURI?: string; decimals: number;
       }[]
     } | null = null
-    const walletAddress = bot.wallet?.walletAddress
-    if (walletAddress) {
-      try {
-        const balancesByChain = await cached(
-          `lifi:balances:${walletAddress}`,
-          60,
-          () => getWalletBalances(walletAddress)
-        ) as Record<number, any[]>
 
-        const assets: {
-          chainId: number; symbol: string; name: string; amount: string;
-          amountFormatted: string; priceUSD: string; valueUSD: number;
-          logoURI?: string; decimals: number;
-        }[] = []
-        for (const [chainId, tokens] of Object.entries(balancesByChain)) {
-          for (const token of tokens) {
-            if (!token.amount || token.amount === '0') continue
-            const amountFormatted = formatUnits(BigInt(token.amount), token.decimals)
-            const priceUSD = token.priceUSD || '0'
-            const valueUSD = parseFloat(amountFormatted) * parseFloat(priceUSD)
-            if (valueUSD < 0.01) continue
+    if (balanceResult.status === 'fulfilled' && balanceResult.value) {
+      const balancesByChain = balanceResult.value as Record<number, any[]>
+      const assets: {
+        chainId: number; symbol: string; name: string; amount: string;
+        amountFormatted: string; priceUSD: string; valueUSD: number;
+        logoURI?: string; decimals: number;
+      }[] = []
+      for (const [chainId, tokens] of Object.entries(balancesByChain)) {
+        for (const token of tokens) {
+          if (!token.amount || token.amount === '0') continue
+          const amountFormatted = formatUnits(BigInt(token.amount), token.decimals)
+          const priceUSD = token.priceUSD || '0'
+          const valueUSD = parseFloat(amountFormatted) * parseFloat(priceUSD)
+          if (valueUSD < 0.01) continue
 
-            assets.push({
-              chainId: Number(chainId),
-              symbol: token.symbol,
-              name: token.name,
-              amount: token.amount,
-              amountFormatted: parseFloat(amountFormatted).toLocaleString('en-US', { maximumFractionDigits: 6 }),
-              priceUSD,
-              valueUSD: Math.round(valueUSD * 100) / 100,
-              logoURI: token.logoURI,
-              decimals: token.decimals,
-            })
-          }
+          assets.push({
+            chainId: Number(chainId),
+            symbol: token.symbol,
+            name: token.name,
+            amount: token.amount,
+            amountFormatted: parseFloat(amountFormatted).toLocaleString('en-US', { maximumFractionDigits: 6 }),
+            priceUSD,
+            valueUSD: Math.round(valueUSD * 100) / 100,
+            logoURI: token.logoURI,
+            decimals: token.decimals,
+          })
         }
-        assets.sort((a, b) => b.valueUSD - a.valueUSD)
-        const totalUSD = assets.reduce((sum, a) => sum + a.valueUSD, 0)
-        walletBalance = { totalUSD: Math.round(totalUSD * 100) / 100, assets }
-      } catch {
-        // LI.FI balance fetch failed, continue without it
       }
+      assets.sort((a, b) => b.valueUSD - a.valueUSD)
+      const totalUSD = assets.reduce((sum, a) => sum + a.valueUSD, 0)
+      walletBalance = { totalUSD: Math.round(totalUSD * 100) / 100, assets }
     }
 
-    // Look up ENS profile on-chain
-    // We check the DB ensName first (fast), then verify on-chain if needed
-    let ensName: string | null = bot.ensName || null
-    let ensProfile = null
-    if (ensName) {
-      try {
-        ensProfile = await getBotProfile(ensName)
-      } catch {
-        // ENS lookup failed, continue without it
-      }
-    }
+    const ensProfile = ensResult.status === 'fulfilled' ? ensResult.value : null
     // P2P trading readiness
     const hasWallet = !!walletAddress
     const hasEns = !!ensName
