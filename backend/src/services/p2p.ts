@@ -230,20 +230,6 @@ const HOOK_ABI = [
     ],
   },
   {
-    name: 'allowedBots',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'bot', type: 'address' }],
-    outputs: [{ name: '', type: 'bool' }],
-  },
-  {
-    name: 'addBot',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'bot', type: 'address' }],
-    outputs: [],
-  },
-  {
     name: 'nextOrderId',
     type: 'function',
     stateMutability: 'view',
@@ -336,9 +322,6 @@ export async function postP2POrder(params: PostOrderParams): Promise<PostOrderRe
   const sellToken0 = isToken0(sellInfo.address, poolKey)
   const sellAmount = BigInt(params.sellAmount)
   const minBuyAmount = BigInt(params.minBuyAmount)
-
-  // Ensure bot is whitelisted on the hook
-  await ensureWhitelisted(params.botAddress)
 
   // Create sponsored AA client (Pimlico pays gas)
   const { client: smartClient, signedAuthorization } = await createSponsoredClient(
@@ -554,12 +537,6 @@ export async function executeP2PSwap(params: MatchOrderParams): Promise<MatchOrd
 
   const poolKey = computePoolKey(payInfo.address, receiveInfo.address)
   const payAmount = BigInt(params.payAmount)
-
-  // Ensure bot is whitelisted
-  await ensureWhitelisted(params.botAddress)
-
-  // Also ensure the router is whitelisted (it's the msg.sender in beforeSwap)
-  await ensureWhitelisted(SWAP_ROUTER_ADDRESS)
 
   const { client: smartClient, signedAuthorization } = await createSponsoredClient(
     params.encryptedPrivateKey, CHAIN_IDS.BASE
@@ -851,7 +828,7 @@ export interface InitPoolResult {
 
 /**
  * Initialize a new Uniswap v4 pool with our hook attached.
- * Uses the admin key (same as for whitelisting).
+ * Uses the admin key for pool initialization.
  * Anyone can call poolManager.initialize — it's permissionless on-chain,
  * but we gate it behind the admin key for consistency.
  */
@@ -909,57 +886,6 @@ export async function initializePool(
   }
 }
 
-
-// ── Bot Whitelisting ──
-
-/**
- * Check if a bot is whitelisted on the hook, auto-whitelist if not.
- * Uses the admin key from env to call addBot().
- */
-export async function ensureWhitelisted(botAddress: string): Promise<void> {
-  const adminKey = process.env.HOOK_ADMIN_PRIVATE_KEY
-  if (!adminKey) {
-    console.warn('[P2P] HOOK_ADMIN_PRIVATE_KEY not set — cannot auto-whitelist')
-    return
-  }
-
-  const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
-
-  // Check if already whitelisted
-  const isAllowed = await publicClient.readContract({
-    address: HOOK_ADDRESS,
-    abi: HOOK_ABI,
-    functionName: 'allowedBots',
-    args: [botAddress as Hex],
-  })
-
-  if (isAllowed) return
-
-  // Whitelist via admin key (direct EOA tx, not sponsored)
-  console.log(`[P2P] Whitelisting bot ${botAddress} on hook...`)
-
-  const admin = privateKeyToAccount(adminKey as Hex)
-
-  const walletClient = createWalletClient({
-    account: admin,
-    chain: base,
-    transport: http(getRpcUrl(CHAIN_IDS.BASE)),
-  })
-
-  const addBotData = encodeFunctionData({
-    abi: HOOK_ABI,
-    functionName: 'addBot',
-    args: [botAddress as Hex],
-  })
-
-  const txHash = await walletClient.sendTransaction({
-    to: HOOK_ADDRESS,
-    data: addBotData,
-    value: 0n,
-  })
-
-  console.log(`[P2P] Bot whitelisted, tx: ${txHash}`)
-}
 
 
 // ── Token Registry Management ──
