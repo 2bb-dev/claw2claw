@@ -49,12 +49,6 @@ contract Claw2ClawHookTest is Test {
             hooks: IHooks(address(hook))
         });
 
-        // Whitelist bots
-        vm.startPrank(admin);
-        hook.addBot(botA);
-        hook.addBot(botB);
-        vm.stopPrank();
-
         // Mint tokens to bots
         token0.mint(botA, 1000 ether);
         token1.mint(botA, 1000 ether);
@@ -78,47 +72,6 @@ contract Claw2ClawHookTest is Test {
     }
 
     // ── Admin tests ─────────────────────────────────────────────────
-
-    function test_addBot() public {
-        address newBot = address(0x123);
-        assertFalse(hook.allowedBots(newBot));
-
-        vm.prank(admin);
-        hook.addBot(newBot);
-
-        assertTrue(hook.allowedBots(newBot));
-    }
-
-    function test_addBot_emitsEvent() public {
-        address newBot = address(0x123);
-
-        vm.expectEmit(true, false, false, false);
-        emit Claw2ClawHook.BotAdded(newBot);
-
-        vm.prank(admin);
-        hook.addBot(newBot);
-    }
-
-    function test_removeBot() public {
-        vm.prank(admin);
-        hook.removeBot(botA);
-
-        assertFalse(hook.allowedBots(botA));
-    }
-
-    function test_removeBot_emitsEvent() public {
-        vm.expectEmit(true, false, false, false);
-        emit Claw2ClawHook.BotRemoved(botA);
-
-        vm.prank(admin);
-        hook.removeBot(botA);
-    }
-
-    function test_addBot_revert_notAdmin() public {
-        vm.prank(notBot);
-        vm.expectRevert(Claw2ClawHook.NotAdmin.selector);
-        hook.addBot(address(0x123));
-    }
 
     // M-2: two-step admin transfer
     function test_setAdmin_twoStep() public {
@@ -196,12 +149,6 @@ contract Claw2ClawHookTest is Test {
         );
 
         vm.prank(botA);
-        hook.postOrder(poolKey, true, 100 ether, 90 ether, 3600);
-    }
-
-    function test_postOrder_revert_notWhitelisted() public {
-        vm.prank(notBot);
-        vm.expectRevert(Claw2ClawHook.NotWhitelisted.selector);
         hook.postOrder(poolKey, true, 100 ether, 90 ether, 3600);
     }
 
@@ -502,23 +449,6 @@ contract Claw2ClawHookTest is Test {
 
         // No settlement
         assertEq(mockPM.getTakeCallCount(), 0);
-    }
-
-    // I-1: non-whitelisted senders fall through to AMM
-    function test_beforeSwap_nonWhitelisted_fallsThrough() public {
-        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
-            zeroForOne: true,
-            amountSpecified: -100 ether,
-            sqrtPriceLimitX96: 0
-        });
-
-        vm.prank(address(mockPM));
-        (bytes4 selector, BeforeSwapDelta delta, uint24 fee) =
-            hook.beforeSwap(notBot, poolKey, params, "");
-
-        assertEq(selector, IHooks.beforeSwap.selector);
-        assertEq(BeforeSwapDelta.unwrap(delta), 0, "Non-whitelisted should get ZERO_DELTA");
-        assertEq(fee, 0);
     }
 
     // I-2: exact-output swaps fall through to AMM
