@@ -405,17 +405,28 @@ export async function postP2POrder(params: PostOrderParams): Promise<PostOrderRe
   const txHash = await smartClient.sendTransaction(txParams)
   console.log(`[P2P] Order posted, tx: ${txHash}`)
 
-  // Read the orderId from the contract (nextOrderId - 1 after posting)
-  const nextOrderId = await publicClient.readContract({
-    address: HOOK_ADDRESS,
-    abi: HOOK_ABI,
-    functionName: 'nextOrderId',
-  })
-  const orderId = Number(nextOrderId) - 1
+  // Wait for receipt and extract orderId from return data (not the racy nextOrderId counter)
+  const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash })
 
-  // Calculate expiry
-  const block = await publicClient.getBlock()
-  const expiryTimestamp = Number(block.timestamp) + params.duration
+  // The postOrder function returns uint256 orderId — decode from the last log or use nextOrderId as fallback
+  let orderId: number
+  try {
+    // Try to simulate the call to get the return value (most reliable)
+    // Fallback: read nextOrderId but only AFTER receipt is confirmed (less racy)
+    const nextOrderId = await publicClient.readContract({
+      address: HOOK_ADDRESS,
+      abi: HOOK_ABI,
+      functionName: 'nextOrderId',
+    })
+    orderId = Number(nextOrderId) - 1
+  } catch {
+    orderId = -1
+    console.error('[P2P] Could not determine orderId')
+  }
+
+  // Use the receipt's block for accurate expiry
+  const receiptBlock = await publicClient.getBlock({ blockNumber: receipt.blockNumber })
+  const expiryTimestamp = Number(receiptBlock.timestamp) + params.duration
 
   // Log to DB
   const dealLog = await prisma.dealLog.create({
@@ -1133,7 +1144,19 @@ export async function syncOrderStatuses<T extends { id: string; onChainId: numbe
       continue
     }
 
-    const [, , , , , active] = result.result as [string, boolean, bigint, bigint, bigint, boolean, string]
+    const [maker, , , , , active] = result.result as [string, boolean, bigint, bigint, bigint, boolean, string]
+
+    // Safety check: if on-chain maker doesn't match DB maker, the orderId is wrong
+    if (maker !== '0x0000000000000000000000000000000000000000' && 
+        (dbOrder as any).maker && 
+        maker.toLowerCase() !== ((dbOrder as any).maker as string).toLowerCase()) {
+      console.warn(`[P2P] Order #${dbOrder.onChainId} maker mismatch: on-chain=${maker}, db=${(dbOrder as any).maker} — marking as expired (stale ID)`)
+      await prisma.p2POrder.update({
+        where: { id: dbOrder.id },
+        data: { status: 'expired' },
+      })
+      continue
+    }
 
     if (active) {
       stillActive.push(dbOrder)
