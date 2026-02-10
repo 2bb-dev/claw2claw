@@ -806,17 +806,20 @@ export async function getActiveOrders(tokenA: string, tokenB: string): Promise<O
 
     const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
 
-    // Get all order IDs for this pool
-    const orderIds = await publicClient.readContract({
-      address: HOOK_ADDRESS,
-      abi: HOOK_ABI,
-      functionName: 'getPoolOrders',
-      args: [poolKey],
-    }) as bigint[]
+    // Use chain block timestamp (not server clock) for consistent expiry checks
+    const [orderIds, block] = await Promise.all([
+      publicClient.readContract({
+        address: HOOK_ADDRESS,
+        abi: HOOK_ABI,
+        functionName: 'getPoolOrders',
+        args: [poolKey],
+      }) as Promise<bigint[]>,
+      publicClient.getBlock({ blockTag: 'latest' }),
+    ])
 
     if (orderIds.length === 0) return []
 
-    const now = Math.floor(Date.now() / 1000)
+    const now = Number(block.timestamp)
 
     // Fetch all order details in a single multicall (1 RPC request instead of N)
     const multicallResults = await publicClient.multicall({
