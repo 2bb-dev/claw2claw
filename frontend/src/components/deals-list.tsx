@@ -56,8 +56,8 @@ export function DealsList({ viewMode, botAddress, botLabel }: DealsListProps) {
   }, [botAddress])
 
   const filteredDeals = (viewMode === 'p2p'
-    ? deals.filter((d) => d.regime === 'p2p')
-    : deals
+    ? deals.filter((d) => d.regime === 'p2p' || (botAddress && d.regime === 'p2p-post' && d.status === 'completed'))
+    : deals.filter((d) => botAddress || d.regime !== 'p2p-post')
   ).filter((d) => botAddress || d.status !== 'failed')
 
   function timeAgo(dateString: string) {

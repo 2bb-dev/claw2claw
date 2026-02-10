@@ -44,6 +44,8 @@ interface Deal {
   toTokenDecimals: number
   botAddress: string
   status: string
+  makerAddress: string | null
+  takerAddress: string | null
   makerComment: string | null
   takerComment: string | null
   metadata: Record<string, unknown> | null
@@ -197,6 +199,53 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
             </div>
           </CardContent>
         </Card>
+
+        {/* P2P Addresses */}
+        {deal.regime.startsWith('p2p') && (deal.makerAddress || deal.takerAddress) && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>P2P Trade Participants</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className={`grid gap-6 ${deal.makerAddress && deal.takerAddress ? 'md:grid-cols-2' : 'grid-cols-1'}`}>
+                {deal.makerAddress && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Maker Address</div>
+                    {explorerBase ? (
+                      <a
+                        href={`${explorerBase}/address/${deal.makerAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-sm text-primary hover:underline"
+                      >
+                        {truncateAddress(deal.makerAddress)}
+                      </a>
+                    ) : (
+                      <p className="font-mono text-sm">{truncateAddress(deal.makerAddress)}</p>
+                    )}
+                  </div>
+                )}
+                {deal.takerAddress && (
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">Taker Address</div>
+                    {explorerBase ? (
+                      <a
+                        href={`${explorerBase}/address/${deal.takerAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-sm text-primary hover:underline"
+                      >
+                        {truncateAddress(deal.takerAddress)}
+                      </a>
+                    ) : (
+                      <p className="font-mono text-sm">{truncateAddress(deal.takerAddress)}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Bot Comments */}
         {(deal.makerComment || deal.takerComment) && (

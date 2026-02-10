@@ -1,14 +1,19 @@
 'use client'
 
 import { api } from '@/lib/api'
-import { useCallback, useState } from 'react'
+import { forwardRef, useCallback, useImperativeHandle, useState } from 'react'
+
+export interface BotSearchHandle {
+  reset: () => void
+}
 
 interface BotSearchProps {
   onBotResolved: (botAddress: string | null, label: string | null) => void
   initialValue?: string | null
 }
 
-export function BotSearch({ onBotResolved, initialValue }: BotSearchProps) {
+export const BotSearch = forwardRef<BotSearchHandle, BotSearchProps>(
+  function BotSearch({ onBotResolved, initialValue }, ref) {
   const [input, setInput] = useState(initialValue || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -17,13 +22,22 @@ export function BotSearch({ onBotResolved, initialValue }: BotSearchProps) {
   const isWalletAddress = (value: string) => /^0x[a-fA-F0-9]{40}$/.test(value)
   const isEnsName = (value: string) => value.includes('.')
 
+  const clearState = useCallback(() => {
+    setInput('')
+    setError(null)
+    setResolvedLabel(null)
+    onBotResolved(null, null)
+  }, [onBotResolved])
+
+  useImperativeHandle(ref, () => ({
+    reset: clearState,
+  }), [clearState])
+
   const handleSearch = useCallback(async () => {
     const trimmed = input.trim()
     if (!trimmed) {
       // Clear — revert to platform view
-      setError(null)
-      setResolvedLabel(null)
-      onBotResolved(null, null)
+      clearState()
       return
     }
 
@@ -32,9 +46,18 @@ export function BotSearch({ onBotResolved, initialValue }: BotSearchProps) {
 
     try {
       if (isWalletAddress(trimmed)) {
-        // Direct wallet address — no resolution needed
+        // Direct wallet address — also try ENS reverse lookup for display
         setResolvedLabel(trimmed)
         onBotResolved(trimmed, trimmed)
+        // Fire-and-forget ENS reverse resolution for a nicer label
+        api.post('/api/bots/ens/reverse', { address: trimmed })
+          .then((res) => {
+            if (res.data.success && res.data.name) {
+              setResolvedLabel(res.data.name)
+              onBotResolved(trimmed, res.data.name)
+            }
+          })
+          .catch(() => {/* ignore — address label is fine */})
       } else if (isEnsName(trimmed)) {
         // ENS name — resolve via backend
         const res = await api.post('/api/bots/ens/resolve', { ensName: trimmed })
@@ -61,13 +84,21 @@ export function BotSearch({ onBotResolved, initialValue }: BotSearchProps) {
     } finally {
       setLoading(false)
     }
-  }, [input, onBotResolved])
+  }, [input, onBotResolved, clearState])
 
   const handleClear = () => {
-    setInput('')
-    setError(null)
-    setResolvedLabel(null)
-    onBotResolved(null, null)
+    clearState()
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setInput(value)
+    // If user clears the input and we had a resolved bot, reset to non-bot state
+    if (value.trim() === '' && resolvedLabel) {
+      setError(null)
+      setResolvedLabel(null)
+      onBotResolved(null, null)
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -93,7 +124,7 @@ export function BotSearch({ onBotResolved, initialValue }: BotSearchProps) {
         <input
           type="text"
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder="Search bot by ENS name or wallet address..."
           className="w-full pl-12 pr-20 py-3 bg-card border border-border rounded-lg text-foreground placeholder:text-muted-foreground font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
@@ -132,4 +163,5 @@ export function BotSearch({ onBotResolved, initialValue }: BotSearchProps) {
       )}
     </div>
   )
-}
+})
+

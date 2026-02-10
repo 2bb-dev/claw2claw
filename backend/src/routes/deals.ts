@@ -157,12 +157,44 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         .map(w => [w.walletAddress, w.botAuth.ensName!])
     )
     
-    // Resolve missing toAmounts for completed P2P deals
-    const toAmountPromises = filteredDeals.map(deal =>
-      !deal.toAmount && deal.regime.startsWith('p2p') && deal.status === 'completed'
-        ? resolveP2PToAmount(deal)
-        : Promise.resolve(deal.toAmount)
-    )
+    // Resolve missing toAmounts for completed P2P deals (both p2p and p2p-post)
+    const toAmountPromises = filteredDeals.map(async (deal) => {
+      if (deal.toAmount) return deal.toAmount
+      if (!deal.regime.startsWith('p2p') || deal.status !== 'completed') return deal.toAmount
+
+      // For taker deals (p2p), resolve from tx receipt
+      if (deal.regime === 'p2p') {
+        return resolveP2PToAmount(deal)
+      }
+
+      // For maker deals (p2p-post), resolve from match tx receipt
+      if (deal.regime === 'p2p-post') {
+        const meta = (deal.metadata as Record<string, unknown>) ?? {}
+        const matchTxHash = meta.matchTxHash as string | undefined
+        if (!matchTxHash) return deal.toAmount
+        try {
+          const tokenInfo = resolveToken(deal.toToken)
+          const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
+          const receipt = await publicClient.getTransactionReceipt({ hash: matchTxHash as Hex })
+          const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+          const botAddrPadded = `0x${deal.botAddress.toLowerCase().replace('0x', '').padStart(64, '0')}`
+          for (const log of receipt.logs) {
+            if (
+              log.address.toLowerCase() === tokenInfo.address.toLowerCase() &&
+              log.topics[0] === TRANSFER_TOPIC &&
+              log.topics[2]?.toLowerCase() === botAddrPadded
+            ) {
+              const amount = BigInt(log.data).toString()
+              await prisma.dealLog.update({ where: { id: deal.id }, data: { toAmount: amount } })
+              return amount
+            }
+          }
+        } catch (err) {
+          console.error(`[deals] Failed to resolve toAmount for p2p-post deal ${deal.id}:`, err)
+        }
+      }
+      return deal.toAmount
+    })
     const resolvedToAmounts = await Promise.all(toAmountPromises)
 
     return {
@@ -295,7 +327,58 @@ export async function dealsRoutes(fastify: FastifyInstance) {
     const meta = (deal.metadata as Record<string, unknown>) ?? {}
 
     // Resolve missing toAmount for completed P2P deals from blockchain
-    const resolvedToAmount = await resolveP2PToAmount(deal)
+    let resolvedToAmount = await resolveP2PToAmount(deal)
+
+    // For completed p2p-post deals, resolve toAmount from the match transaction
+    if (!resolvedToAmount && deal.regime === 'p2p-post' && deal.status === 'completed' && meta.matchTxHash) {
+      try {
+        const tokenInfo = resolveToken(deal.toToken)
+        const publicClient = createBlockchainClient(CHAIN_IDS.BASE)
+        const receipt = await publicClient.getTransactionReceipt({ hash: meta.matchTxHash as Hex })
+        const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+        const botAddrPadded = `0x${deal.botAddress.toLowerCase().replace('0x', '').padStart(64, '0')}`
+        for (const log of receipt.logs) {
+          if (
+            log.address.toLowerCase() === tokenInfo.address.toLowerCase() &&
+            log.topics[0] === TRANSFER_TOPIC &&
+            log.topics[2]?.toLowerCase() === botAddrPadded
+          ) {
+            resolvedToAmount = BigInt(log.data).toString()
+            await prisma.dealLog.update({
+              where: { id: deal.id },
+              data: { toAmount: resolvedToAmount },
+            })
+            break
+          }
+        }
+      } catch (err) {
+        console.error(`[deals] Failed to resolve toAmount for p2p-post deal ${deal.id}:`, err)
+      }
+    }
+
+    // Resolve maker/taker addresses for P2P deals
+    let makerAddress: string | null = null
+    let takerAddress: string | null = null
+
+    if (deal.regime === 'p2p-post') {
+      // Maker posted this order
+      makerAddress = deal.botAddress
+      takerAddress = (meta.matchedBy as string) ?? null
+    } else if (deal.regime === 'p2p') {
+      // Taker executed this swap
+      takerAddress = deal.botAddress
+      // Find the maker by looking at matched P2P orders for this tx
+      try {
+        const matchedOrder = await prisma.p2POrder.findFirst({
+          where: { matchTxHash: deal.txHash },
+        })
+        if (matchedOrder) {
+          makerAddress = matchedOrder.maker
+        }
+      } catch (err) {
+        console.error(`[deals] Failed to resolve maker address for deal ${deal.id}:`, err)
+      }
+    }
 
     return {
       success: true,
@@ -312,6 +395,8 @@ export async function dealsRoutes(fastify: FastifyInstance) {
         toTokenDecimals: (meta.toTokenDecimals as number) ?? TOKEN_DECIMALS[deal.toToken.toUpperCase()] ?? 18,
         botAddress: deal.botAddress,
         botEnsName: wallet?.botAuth.ensName ?? null,
+        makerAddress,
+        takerAddress,
         status: resolvedStatus,
         makerComment: deal.makerComment,
         takerComment: deal.takerComment,

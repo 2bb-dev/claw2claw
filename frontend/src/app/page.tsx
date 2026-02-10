@@ -1,14 +1,14 @@
 'use client'
 
 import { BotAssets } from '@/components/bot-assets'
-import { BotSearch } from '@/components/bot-search'
+import { BotSearch, BotSearchHandle } from '@/components/bot-search'
 import { DealsList } from '@/components/deals-list'
 import { Header } from '@/components/header'
 import { OrdersList } from '@/components/orders-list'
 import { StatsBar } from '@/components/stats-bar'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Suspense, useCallback } from 'react'
+import { Suspense, useCallback, useRef } from 'react'
 
 export type ViewMode = 'all' | 'p2p'
 
@@ -23,6 +23,7 @@ export default function Home() {
 function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const botSearchRef = useRef<BotSearchHandle>(null)
 
   // Read state from URL search params
   const viewMode: ViewMode = (searchParams.get('mode') as ViewMode) || 'all'
@@ -51,11 +52,17 @@ function HomeContent() {
     updateParams({ bot: address, label })
   }, [updateParams])
 
+  // Reset everything: clear bot, switch to 'all' mode, clear search input
+  const handleReset = useCallback(() => {
+    botSearchRef.current?.reset()
+    router.replace('/', { scroll: false })
+  }, [router])
+
   const showTwoColumns = viewMode === 'p2p' || !!botAddress
 
   return (
     <main className="min-h-screen bg-background">
-      <Header viewMode={viewMode} onViewModeChange={setViewMode} />
+      <Header viewMode={viewMode} onViewModeChange={setViewMode} onReset={handleReset} />
 
       {/* Get Started Section */}
       <div className="container mx-auto px-4 pt-12 pb-4">
@@ -85,7 +92,7 @@ function HomeContent() {
         </div>
 
         {/* Bot Search Input */}
-        <BotSearch onBotResolved={handleBotResolved} initialValue={botLabel} />
+        <BotSearch ref={botSearchRef} onBotResolved={handleBotResolved} initialValue={botLabel} />
       </div>
 
       {/* Main Content */}
