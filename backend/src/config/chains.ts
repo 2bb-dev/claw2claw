@@ -67,7 +67,7 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'ETH',
     blockExplorer: 'https://etherscan.io',
     rpcUrls: {
-      default: 'https://eth.llamarpc.com',
+      default: process.env.DEFAULT_ETH_MAINNET_RPC_URL || 'https://eth.llamarpc.com',
       alchemy: `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       infura: `https://mainnet.infura.io/v3/${INFURA_PROJECT_ID}`,
     },
@@ -166,7 +166,7 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'ETH',
     blockExplorer: 'https://sepolia.etherscan.io',
     rpcUrls: {
-      default: 'https://ethereum-sepolia-rpc.publicnode.com',
+      default: process.env.DEFAULT_SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com',
       alchemy: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       infura: `https://sepolia.infura.io/v3/${INFURA_PROJECT_ID}`,
     },

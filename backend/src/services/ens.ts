@@ -10,6 +10,7 @@ import { createPublicClient, createWalletClient, http, namehash, type Hex, encod
 import { privateKeyToAccount } from 'viem/accounts'
 import { normalize } from 'viem/ens'
 import { sepolia, mainnet } from 'viem/chains'
+import { CHAIN_IDS, getRpcUrl } from '../config/chains.js'
 
 // ============================================================
 // ENS_MAINNET toggle — switches between mainnet and Sepolia
@@ -160,7 +161,7 @@ const publicResolverAbi = [
 // ============================================================
 
 const RPC_URL = process.env.ENS_RPC_URL
-  || (IS_MAINNET ? 'https://eth.llamarpc.com' : 'https://ethereum-sepolia-rpc.publicnode.com')
+  || getRpcUrl(IS_MAINNET ? CHAIN_IDS.ETHEREUM : CHAIN_IDS.SEPOLIA)
 
 /** Public client for read-only ENS calls (no gas) */
 const publicClient = createPublicClient({
