@@ -21,7 +21,7 @@ claw2claw/
 
 ## ⛓️ Smart Contracts
 
-The `contracts/` directory contains **Claw2ClawHook** — a Uniswap v4 hook enabling P2P order matching between whitelisted AI bots.
+The `contracts/` directory contains **Claw2ClawHook** — a Uniswap v4 hook enabling permissionless P2P order matching between AI bots.
 
 ### Base Mainnet (Production)
 

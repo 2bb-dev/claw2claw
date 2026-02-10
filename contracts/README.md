@@ -1,19 +1,18 @@
 # Claw2ClawHook — P2P Order Matching on Uniswap v4
 
-A Uniswap v4 hook that enables peer-to-peer (P2P) order matching between whitelisted bots, bypassing pool liquidity when matching orders are available.
+A Uniswap v4 hook that enables permissionless peer-to-peer (P2P) order matching between bots, bypassing pool liquidity when matching orders are available.
 
 **Trade CLAW 🐾 for ZUG ⚡ — Peer-to-peer, on-chain, on Uniswap v4!**
 
 ## Overview
 
-Claw2ClawHook acts as an on-chain order book integrated directly into a Uniswap v4 pool. Whitelisted bots can post orders, and when another bot attempts to swap through the pool, the hook checks for matching orders and executes P2P trades directly between the maker and taker.
+Claw2ClawHook acts as an on-chain order book integrated directly into a Uniswap v4 pool. Any bot can post orders, and when another bot attempts to swap through the pool, the hook checks for matching orders and executes P2P trades directly between the maker and taker.
 
 ### Key Features
 
 - **On-chain Order Book**: Orders stored on-chain with expiry times
 - **P2P Matching**: Direct token transfers between maker and taker when orders match
 - **Fallback to Pool**: If no matching order exists, swaps fall through to normal pool liquidity
-- **Bot Whitelist**: Only authorized bots can post orders and swap
 - **BeforeSwapDelta**: Uses custom accounting to bypass pool liquidity for P2P trades
 
 ## Architecture
@@ -36,7 +35,7 @@ Claw2ClawHook acts as an on-chain order book integrated directly into a Uniswap 
    │
 3. beforeSwap Hook
    │
-   ├─> Check whitelist (Bot B authorized?)
+   ├─> Check for matching orders
    ├─> Search for matching orders
    │   ├─> Check: opposite direction?
    │   ├─> Check: sufficient amount?
@@ -172,7 +171,7 @@ poolManager.swap(
 
 The `beforeSwap` hook:
 
-1. **Checks whitelist** - Reverts if Bot B is not authorized
+1. **Validates swap params** - Only handles exact-input swaps
 2. **Searches orders** - Iterates through active orders for this pool
 3. **Validates match**:
    - Direction: Bot A sells token0, Bot B sells token1 (opposite) ✓
@@ -251,11 +250,11 @@ This means our tests verify the **complete P2P settlement flow**:
 
 | Category | Tests | What's Verified |
 |----------|-------|-----------------|
-| **Admin** | 7 | addBot, removeBot, two-step setAdmin/acceptAdmin, events, access control |
-| **Order Posting** | 6 | Success, escrow transfer, events, zero-amount/duration reverts, max duration |
+| **Admin** | 2 | two-step setAdmin/acceptAdmin |
+| **Order Posting** | 5 | Success, escrow transfer, events, zero-amount/duration reverts, max duration |
 | **Order Cancellation** | 5 | Success, refund, events, unauthorized, double-cancel, cross-pool theft prevention |
 | **P2P Matching** | 6 | Full settlement (both directions), token balances, multi-order, skip-filled |
-| **No Match** | 4 | Same direction, insufficient amount, expired orders, non-whitelisted passthrough |
+| **No Match** | 2 | Same direction, insufficient amount |
 | **View Functions** | 1 | getPoolOrders |
 | **afterSwap** | 1 | No-op verification |
 | **Access Control** | 2 | Non-PM caller revert, exact-output fallthrough |
@@ -283,15 +282,7 @@ This means our tests verify the **complete P2P settlement flow**:
 
 ## Usage Example
 
-### 1. Whitelist Bots
-
-```solidity
-// Admin whitelists Bot A and Bot B
-hook.addBot(botA);
-hook.addBot(botB);
-```
-
-### 2. Bot A Posts Order
+### 1. Bot A Posts Order
 
 ```solidity
 // Approve hook to spend CLAW tokens
@@ -307,7 +298,7 @@ uint256 orderId = hook.postOrder(
 );
 ```
 
-### 3. Bot B Swaps (P2P Match)
+### 2. Bot B Swaps (P2P Match)
 
 ```solidity
 // Approve ZUG tokens for swap
@@ -328,7 +319,7 @@ poolSwapTest.swap(
 // Result: Bot A and Bot B traded CLAW<>ZUG directly, pool liquidity not touched
 ```
 
-### 4. Cancel Order (Optional)
+### 3. Cancel Order (Optional)
 
 ```solidity
 // Bot A cancels unfilled order
@@ -338,7 +329,7 @@ hook.cancelOrder(orderId, poolKey);
 
 ## Security Considerations
 
-- **Whitelist Only**: Only authorized bots can interact
+- **Permissionless**: Any address can post orders and trade
 - **Expiry Protection**: Orders automatically expire
 - **Maker Authorization**: Only maker can cancel their order
 - **Amount Validation**: Ensures maker's minAmountOut is satisfied

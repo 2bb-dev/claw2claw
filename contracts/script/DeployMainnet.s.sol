@@ -71,10 +71,6 @@ contract DeployMainnet is Script {
         console.log("Claw2ClawHook deployed:", hookAddr);
         require(uint160(hookAddr) & FLAG_MASK == REQUIRED_FLAGS, "Flag mismatch");
 
-        // 4. Whitelist deployer as initial bot
-        Claw2ClawHook hook = Claw2ClawHook(hookAddr);
-        hook.addBot(deployer);
-        console.log("Deployer whitelisted as bot");
 
         vm.stopBroadcast();
 
@@ -88,6 +84,6 @@ contract DeployMainnet is Script {
         console.log("  1. Verify on BaseScan:");
         console.log("     forge verify-contract <HOOK_ADDR> Claw2ClawHook --chain base");
         console.log("  2. Initialize a pool with real tokens");
-        console.log("  3. Whitelist bot wallets via addBot()");
+        console.log("  3. Fund bot wallets and start trading");
     }
 }

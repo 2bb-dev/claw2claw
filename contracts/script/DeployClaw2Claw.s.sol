@@ -106,15 +106,7 @@ contract DeployClaw2Claw is Script {
         console.log("Claw2ClawHook:", hookAddr);
         require(uint160(hookAddr) & FLAG_MASK == REQUIRED_FLAGS, "Flag mismatch");
 
-        Claw2ClawHook hook = Claw2ClawHook(hookAddr);
-
-        // --- 3. Whitelist deployer + helpers as bots ---
-        hook.addBot(deployer);
-        hook.addBot(POOL_SWAP_TEST);
-        hook.addBot(POOL_MODIFY_LIQUIDITY_TEST);
-        console.log("Bots whitelisted");
-
-        // --- 4. Initialize pool ---
+        // --- 3. Initialize pool ---
         address token0;
         address token1;
         if (address(claw) < address(zug)) {
