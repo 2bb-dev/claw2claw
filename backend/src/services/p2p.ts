@@ -653,7 +653,7 @@ export async function executeP2PSwap(params: MatchOrderParams): Promise<MatchOrd
     console.error('[P2P] Failed to extract toAmount from receipt:', err)
   }
 
-  // Log deal
+  // Log deal for taker
   const dealLog = await prisma.dealLog.create({
     data: {
       txHash,
@@ -677,6 +677,83 @@ export async function executeP2PSwap(params: MatchOrderParams): Promise<MatchOrd
       },
     },
   })
+
+  // Fire-and-forget: sync maker order statuses after swap
+  // Check on-chain which orders are no longer active → mark as filled in DB
+  ;(async () => {
+    try {
+      // Find all 'active' P2POrders in this pool
+      const activeOrders = await prisma.p2POrder.findMany({
+        where: {
+          status: 'active',
+          poolKey: {
+            path: ['currency0'],
+            equals: poolKey.currency0,
+          },
+        },
+      })
+
+      if (activeOrders.length === 0) return
+
+      // Check each on-chain
+      const orderChecks = await publicClient.multicall({
+        contracts: activeOrders.map((o) => ({
+          address: HOOK_ADDRESS,
+          abi: HOOK_ABI,
+          functionName: 'orders' as const,
+          args: [BigInt(o.onChainId)],
+        })),
+      })
+
+      for (let i = 0; i < orderChecks.length; i++) {
+        const result = orderChecks[i]
+        const dbOrder = activeOrders[i]
+        if (result.status !== 'success') continue
+
+        const [, , , , , active] = result.result as [string, boolean, bigint, bigint, bigint, boolean, string]
+
+        // Order is no longer active on-chain → it was filled or expired
+        if (!active) {
+          const now = new Date()
+          const isExpired = dbOrder.expiry < now
+          const newStatus = isExpired ? 'expired' : 'filled'
+
+          await prisma.p2POrder.update({
+            where: { id: dbOrder.id },
+            data: {
+              status: newStatus,
+              ...(newStatus === 'filled' && { matchTxHash: txHash }),
+            },
+          })
+
+          // Update maker's DealLog too (store match info in metadata to avoid schema change)
+          if (newStatus === 'filled' && dbOrder.txHash) {
+            const makerDeal = await prisma.dealLog.findFirst({
+              where: { txHash: dbOrder.txHash, regime: 'p2p-post', status: 'pending' },
+            })
+            if (makerDeal) {
+              const existingMeta = (makerDeal.metadata as Record<string, unknown>) ?? {}
+              await prisma.dealLog.update({
+                where: { id: makerDeal.id },
+                data: {
+                  status: 'completed',
+                  metadata: {
+                    ...existingMeta,
+                    matchedBy: params.botAddress,
+                    matchTxHash: txHash,
+                  },
+                },
+              })
+            }
+          }
+
+          console.log(`[P2P] Maker order #${dbOrder.onChainId} marked as ${newStatus} (match tx: ${txHash})`)
+        }
+      }
+    } catch (err) {
+      console.error('[P2P] Failed to sync maker order statuses:', err)
+    }
+  })()
 
   return {
     txHash,
