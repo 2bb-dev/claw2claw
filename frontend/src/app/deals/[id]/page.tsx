@@ -43,6 +43,7 @@ interface Deal {
   fromTokenDecimals: number
   toTokenDecimals: number
   botAddress: string
+  botEnsName: string | null
   status: string
   makerAddress: string | null
   takerAddress: string | null
@@ -162,11 +163,28 @@ export default function DealPage({ params }: { params: Promise<{ id: string }> }
             </div>
 
             {/* Metadata row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
+            <div className={`grid grid-cols-1 ${deal.regime.startsWith('p2p') ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4 pt-4 border-t border-border`}>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Created At</div>
                 <div className="text-sm font-mono">{new Date(deal.createdAt).toLocaleString()}</div>
               </div>
+              {!deal.regime.startsWith('p2p') && (
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Bot</div>
+                  {explorerBase ? (
+                    <a
+                      href={`${explorerBase}/address/${deal.botAddress}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-sm text-primary hover:underline"
+                    >
+                      {deal.botEnsName || truncateAddress(deal.botAddress)}
+                    </a>
+                  ) : (
+                    <p className="font-mono text-sm">{deal.botEnsName || truncateAddress(deal.botAddress)}</p>
+                  )}
+                </div>
+              )}
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Transaction</div>
                 {!isPending && txUrl ? (
