@@ -39,6 +39,7 @@ export interface ChainConfig {
   // RPC URLs (fallback order)
   rpcUrls: {
     default: string
+    custom?: string
     alchemy?: string
     infura?: string
   }
@@ -67,7 +68,8 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'ETH',
     blockExplorer: 'https://etherscan.io',
     rpcUrls: {
-      default: process.env.DEFAULT_ETH_MAINNET_RPC_URL || 'https://eth.llamarpc.com',
+      default: 'https://eth.llamarpc.com',
+      custom: process.env.DEFAULT_ETH_MAINNET_RPC_URL || undefined,
       alchemy: `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       infura: `https://mainnet.infura.io/v3/${INFURA_PROJECT_ID}`,
     },
@@ -110,7 +112,8 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'ETH',
     blockExplorer: 'https://basescan.org',
     rpcUrls: {
-      default: process.env.DEFAULT_BASE_RPC_URL || 'https://mainnet.base.org',
+      default: 'https://mainnet.base.org',
+      custom: process.env.DEFAULT_BASE_RPC_URL || undefined,
       alchemy: `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
     },
     supportsAA: true,
@@ -166,7 +169,8 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'ETH',
     blockExplorer: 'https://sepolia.etherscan.io',
     rpcUrls: {
-      default: process.env.DEFAULT_SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com',
+      default: 'https://ethereum-sepolia-rpc.publicnode.com',
+      custom: process.env.DEFAULT_SEPOLIA_RPC_URL || undefined,
       alchemy: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       infura: `https://sepolia.infura.io/v3/${INFURA_PROJECT_ID}`,
     },
@@ -224,6 +228,7 @@ export function getPimlicoRpcUrl(chainId: number): string {
 
 /**
  * Get the best available RPC URL for a chain
+ * Priority: custom env var > Alchemy > hardcoded default
  */
 export function getRpcUrl(chainId: number): string {
   const config = CHAINS[chainId]
@@ -231,8 +236,11 @@ export function getRpcUrl(chainId: number): string {
     throw new Error(`Unsupported chain: ${chainId}`)
   }
   
-  // Prefer Alchemy if API key is configured (higher rate limits)
-  // Fall back to public default RPC otherwise
+  // Custom env var RPCs take highest priority (user explicitly set these)
+  if (config.rpcUrls.custom) {
+    return config.rpcUrls.custom
+  }
+  // Fall back to Alchemy if API key is configured
   if (config.rpcUrls.alchemy && ALCHEMY_API_KEY) {
     return config.rpcUrls.alchemy
   }
