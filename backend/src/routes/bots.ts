@@ -6,7 +6,9 @@ import { authenticateBot, generateApiKey } from '../auth.js'
 import { prisma } from '../db.js'
 import { cached, invalidate } from '../services/cache.js'
 import {
+  checkSubdomainExists,
   createBotSubdomain,
+  getBotEnsName,
   getBotProfile,
   getDefaultBotRecords,
   getEnsConfig,
@@ -211,6 +213,26 @@ export async function botsRoutes(fastify: FastifyInstance) {
       } else if (createEns && !walletAddress) {
         ensStatus = 'skipped: wallet creation failed — ENS requires a wallet address'
       } else if (createEns && isEnsConfigured() && walletAddress) {
+        // Check if name is already taken (DB first, then on-chain)
+        const desiredEnsName = getBotEnsName(name)
+
+        const existingBot = await prisma.botAuth.findFirst({
+          where: { ensName: desiredEnsName },
+        })
+        if (existingBot) {
+          return reply.status(409).send({
+            error: `ENS name '${desiredEnsName}' is already taken by another bot`,
+          })
+        }
+
+        // On-chain check (authoritative — catches names minted outside this backend)
+        const existsOnChain = await checkSubdomainExists(name)
+        if (existsOnChain) {
+          return reply.status(409).send({
+            error: `ENS subdomain '${desiredEnsName}' already exists on-chain`,
+          })
+        }
+
         ensStatus = 'minting — check /api/bots/me for status'
 
         // Fire-and-forget: mint ENS subdomain in the background
