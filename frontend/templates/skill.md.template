@@ -129,26 +129,29 @@ Returns:
           "priceUSD": "1.0",
           "valueUSD": 67.00,
           "decimals": 6
-        },
-        {
-          "chainId": 56,
-          "symbol": "BNB",
-          "name": "BNB",
-          "amount": "18455000000000000",
-          "amountFormatted": "0.018455",
-          "priceUSD": "641.41",
-          "valueUSD": 11.84,
-          "decimals": 18
         }
       ]
     },
     "ensProfile": { "ensName": "...", "address": "...", "records": {} },
+    "activeP2POrders": [
+      {
+        "orderId": 95,
+        "sellToken0": false,
+        "amountEscrowed": "10000000",
+        "minAmountOut": "4800000000000000",
+        "expiry": "2026-02-10T13:02:00.000Z",
+        "status": "active",
+        "txHash": "0x..."
+      }
+    ],
+    "p2pEnabled": true,
+    "p2pStatus": "ready",
     "createdAt": "..."
   }
 }
 ```
 
-> **This is your portfolio overview.** `walletBalance` includes all tokens on all chains — sorted by USD value, dust (< $0.01) filtered out. Cached 60 seconds.
+> **This is your portfolio overview.** `walletBalance` includes all tokens on all chains — sorted by USD value, dust (< $0.01) filtered out. `activeP2POrders` shows your escrowed funds locked in open P2P orders — your actual portfolio is wallet balance + escrowed orders.
 
 #### `GET /api/bots/`
 List all registered bots. Public, no auth.

@@ -66,7 +66,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
     const walletAddress = bot.wallet?.walletAddress
     const ensName: string | null = bot.ensName || null
 
-    const [balanceResult, ensResult] = await Promise.allSettled([
+    const [balanceResult, ensResult, p2pResult] = await Promise.allSettled([
       // LI.FI multi-chain portfolio (fresh data, API key handles rate limits)
       walletAddress
         ? getWalletBalances(walletAddress)
@@ -75,6 +75,13 @@ export async function botsRoutes(fastify: FastifyInstance) {
       ensName
         ? cached(`ens:profile:${ensName}`, 300, () => getBotProfile(ensName))
         : Promise.resolve(null),
+      // Active P2P orders (fast DB query — shows escrowed funds)
+      walletAddress
+        ? prisma.p2POrder.findMany({
+            where: { maker: walletAddress, status: 'active' },
+            orderBy: { createdAt: 'desc' },
+          })
+        : Promise.resolve([]),
     ])
 
     // Process wallet balances
@@ -121,6 +128,20 @@ export async function botsRoutes(fastify: FastifyInstance) {
     }
 
     const ensProfile = ensResult.status === 'fulfilled' ? ensResult.value : null
+
+    // Active P2P orders (escrowed funds the bot should know about)
+    const activeP2POrders = p2pResult.status === 'fulfilled' && Array.isArray(p2pResult.value)
+      ? (p2pResult.value as any[]).map((o) => ({
+          orderId: o.onChainId,
+          sellToken0: o.sellToken0,
+          amountEscrowed: o.amountIn,
+          minAmountOut: o.minAmountOut,
+          expiry: o.expiry,
+          status: o.status,
+          txHash: o.txHash,
+        }))
+      : []
+
     // P2P trading readiness
     const hasWallet = !!walletAddress
     const hasEns = !!ensName
@@ -148,6 +169,7 @@ export async function botsRoutes(fastify: FastifyInstance) {
         ensProfile,
         p2pEnabled,
         p2pStatus,
+        activeP2POrders,
         createdAt: bot.createdAt,
       }
     }
