@@ -12,7 +12,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title Claw2ClawHook
-/// @notice Uniswap v4 hook enabling P2P order matching between whitelisted bots.
+/// @notice Uniswap v4 hook enabling P2P order matching between bots.
 /// @dev Uses CustomCurve pattern: take input from PM, settle output to PM.
 contract Claw2ClawHook is IHooks, ReentrancyGuard {
     using BalanceDeltaLibrary for BalanceDelta;
@@ -34,15 +34,12 @@ contract Claw2ClawHook is IHooks, ReentrancyGuard {
     event OrderCancelled(uint256 indexed orderId, address indexed maker);
     event OrderExpired(uint256 indexed orderId, address indexed maker);
     event P2PTrade(uint256 indexed orderId, address indexed maker, address indexed taker, address tokenIn, address tokenOut, uint128 amountIn, uint128 amountOut);
-    event BotAdded(address indexed bot);
-    event BotRemoved(address indexed bot);
     event AdminChanged(address indexed oldAdmin, address indexed newAdmin);
     event PendingAdminSet(address indexed pendingAdmin);
     event RefundFailed(uint256 indexed orderId, address indexed maker);
 
     // Errors
     error NotAdmin();
-    error NotWhitelisted();
     error HookNotImplemented();
     error OrderNotFound();
     error OrderNotActive();
@@ -65,7 +62,6 @@ contract Claw2ClawHook is IHooks, ReentrancyGuard {
     address public admin;
     address public pendingAdmin; // M-2 fix: two-step admin transfer
     IPoolManager public immutable poolManager;
-    mapping(address => bool) public allowedBots;
     uint256 public nextOrderId;
     mapping(uint256 => Order) public orders;
     mapping(bytes32 => uint256[]) public poolOrders;
@@ -86,14 +82,7 @@ contract Claw2ClawHook is IHooks, ReentrancyGuard {
         if (msg.sender != address(poolManager)) revert OnlyPoolManager();
         _;
     }
-    modifier onlyWhitelisted() {
-        if (!allowedBots[msg.sender]) revert NotWhitelisted();
-        _;
-    }
-
     // Admin
-    function addBot(address bot) external onlyAdmin { allowedBots[bot] = true; emit BotAdded(bot); }
-    function removeBot(address bot) external onlyAdmin { allowedBots[bot] = false; emit BotRemoved(bot); }
 
     // M-2 fix: two-step admin transfer
     function setAdmin(address newAdmin) external onlyAdmin {
@@ -111,7 +100,7 @@ contract Claw2ClawHook is IHooks, ReentrancyGuard {
 
     // Order Book
     function postOrder(PoolKey calldata key, bool sellToken0, uint128 amountIn, uint128 minAmountOut, uint256 duration)
-        external onlyWhitelisted nonReentrant returns (uint256 orderId)
+        external nonReentrant returns (uint256 orderId)
     {
         if (amountIn == 0 || minAmountOut == 0) revert InvalidAmounts();
         if (duration == 0) revert InvalidDuration();
@@ -161,10 +150,6 @@ contract Claw2ClawHook is IHooks, ReentrancyGuard {
     function beforeSwap(address sender, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
         external onlyPoolManager nonReentrant returns (bytes4, BeforeSwapDelta, uint24)
     {
-        // I-1 fix: don't block non-whitelisted senders -- fall through to AMM instead
-        if (!allowedBots[sender]) {
-            return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
-        }
         // I-2 fix: don't revert on exact-output, just fall through to AMM
         if (params.amountSpecified >= 0) {
             return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
