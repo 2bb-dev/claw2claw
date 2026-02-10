@@ -110,7 +110,7 @@ export const CHAINS: Record<number, ChainConfig> = {
     nativeCurrency: 'ETH',
     blockExplorer: 'https://basescan.org',
     rpcUrls: {
-      default: 'https://mainnet.base.org',
+      default: process.env.DEFAULT_BASE_RPC_URL || 'https://mainnet.base.org',
       alchemy: `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
     },
     supportsAA: true,
